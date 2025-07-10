@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ScratchFile FileVersion="3.0">
+  <FileVersion>3.0</FileVersion>
+  <Workspace>
+    <WorkspaceType>Single-project</WorkspaceType>
+    <WorkspacePath>D:\OneDrive\Documentos\Os_meus_sistemas_embedidos\STM32F746\tcp_server_socket\</WorkspacePath>
+    <underRoot>true</underRoot>
+    <TrustZone>0</TrustZone>
+    <HAL_Driver>D:\STM32Cube\STM32Cube_FW_F7_V1.17.2</HAL_Driver>
+    <CMSIS>Drivers/CMSIS</CMSIS>
+    <Toolchain>STM32CubeIDE</Toolchain>
+    <IocFile>tcp_server_socket.ioc</IocFile>
+    <Project>
+      <ProjectName>tcp_server_socket</ProjectName>
+      <ProjectNature>C</ProjectNature>
+      <Secure />
+      <filestoremove />
+      <sourceEntriesToRemove>
+        <sourceEntry />
+      </sourceEntriesToRemove>
+      <configs>
+        <config>
+          <name>tcp_server_socket</name>
+          <mainSourceRepo>Core</mainSourceRepo>
+          <sourceStructure>Advanced</sourceStructure>
+          <device>STM32F746NGHx</device>
+          <cpucore>Arm Cortex-M7</cpucore>
+          <fpu>SP</fpu>
+          <memories>
+            <memory access="xrw" name="RAM" size="327680" start="0x20000000" />
+            <memory access="rx" name="FLASH" size="1048576" start="0x8000000" />
+          </memories>
+          <startup>D:\STM32Cube\STM32Cube_FW_F7_V1.17.1\Drivers\CMSIS\Device\ST\STM32F7xx\Source\Templates\gcc\startup_stm32f746xx.s</startup>
+          <LinkSettings>
+            <LinkAdditionalLibs />
+          </LinkSettings>
+          <heapSize>0x200</heapSize>
+          <stackSize>0x400</stackSize>
+          <cpuclock>209.375</cpuclock>
+          <board>STM32F746G-DISCO</board>
+          <debugprobe>swd</debugprobe>
+          <optimization />
+          <Aincludes>
+            <include />
+          </Aincludes>
+          <Adefines />
+          <Cdefines>
+            <define>USE_HAL_DRIVER</define>
+            <define>STM32F746xx</define>
+          </Cdefines>
+          <Ldefines />
+          <Cincludes>
+            <include>Core\Inc</include>
+            <include>LWIP\App</include>
+            <include>LWIP\Target</include>
+            <include>Middlewares\Third_Party\LwIP\src\include</include>
+            <include>Middlewares\Third_Party\LwIP\system</include>
+            <include>Middlewares\Third_Party\LwIP\src\include</include>
+            <include>Middlewares\Third_Party\LwIP\system</include>
+            <include>Drivers\STM32F7xx_HAL_Driver\Inc</include>
+            <include>Drivers\STM32F7xx_HAL_Driver\Inc\Legacy</include>
+            <include>Middlewares\Third_Party\FreeRTOS\Source\include</include>
+            <include>Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2</include>
+            <include>Middlewares\Third_Party\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</include>
+            <include>Drivers\BSP\Components\lan8742</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\netif\ppp</include>
+            <include>Drivers\CMSIS\Device\ST\STM32F7xx\Include</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\lwip</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\lwip\apps</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\lwip\priv</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\lwip\prot</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\netif</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\compat\posix</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\compat\posix\arpa</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\compat\posix\net</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\compat\posix\sys</include>
+            <include>Middlewares\Third_Party\LwIP\src\include\compat\stdc</include>
+            <include>Middlewares\Third_Party\LwIP\system\arch</include>
+            <include>Drivers\CMSIS\Include</include>
+          </Cincludes>
+          <definestoremove>
+            <Adefines />
+            <Cdefines>
+              <define>USE_FULL_LL_DRIVER</define>
+              <define>USE_FULL_ASSERT=1U</define>
+            </Cdefines>
+            <Ldefines />
+          </definestoremove>
+          <inctoremove>
+            <Aincludes>
+              <include />
+            </Aincludes>
+            <Cincludes />
+          </inctoremove>
+        </config>
+      </configs>
+      <copyAsReference>false</copyAsReference>
+      <sourceEntries>
+        <sourceEntry>
+          <name>Core</name>
+        </sourceEntry>
+        <sourceEntry>
+          <name>LWIP</name>
+        </sourceEntry>
+        <sourceEntry>
+          <name>Drivers</name>
+        </sourceEntry>
+        <sourceEntry>
+          <name>Middlewares</name>
+        </sourceEntry>
+      </sourceEntries>
+      <Groups />
+    </Project>
+  </Workspace>
+</ScratchFile>
+
