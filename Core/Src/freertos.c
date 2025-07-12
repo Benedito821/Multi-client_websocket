@@ -25,9 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "lwip/api.h"
-#include "lwip/inet.h"
-#include "lwip/sockets.h"
+#include "app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,16 +55,39 @@ const osThreadAttr_t tcp_server_Task_attributes = {
 
 osThreadId_t client_socket_TaskHandle;
 
-typedef struct client_socket
-{
-	struct sockaddr_in remotehost;
-	socklen_t sockaddrsize;
-	int accept_sock;
-}ts_client_socket;
+const osThreadAttr_t client_socket_Task_attributes = {
+  .name = "client_socket_thread",
+  .stack_size = 2*1024,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+osThreadId_t modbus_TaskHandle;
+
+const osThreadAttr_t modbus_Task_attributes = {
+  .name = "modbus_thread",
+  .stack_size = 2*1024,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 
 ts_client_socket client_socket01;
 
-volatile size_t stack_control_var = 0;
+size_t stack_control_var = 0;
+
+char out_buffer[SOCK_DATA_BUFF_LEN] = {0};
+
+static nmbs_t nmbs;
+
+static nmbs_server_t nmbs_server = {
+        .id = 0x01,
+        .coils =
+                {
+                        0,
+                },
+        .regs =
+                {
+                        0,
+                },
+};
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -75,18 +96,11 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-
-const osThreadAttr_t client_socket_Task_attributes = {
-  .name = "client_socket_thread",
-  .stack_size = 2*1024,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
-char out_buffer[SOCK_DATA_BUFF_LEN] = {0};
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
 static void client_socket_thread(void* argument);
+static void modbus_thread(void* argument);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -175,10 +189,11 @@ static void tcp_server_thread(void* argument)
 {
 	uint16_t port = 502;
 	int sock,accept_sock;
-//	sock = -1;
-//	accept_sock=-1;
 	struct sockaddr_in address,remotehost;
 	socklen_t sockaddrsize;
+
+	nmbs_server_init(&nmbs, &nmbs_server);
+
 	if((sock = socket(AF_INET,SOCK_STREAM,0)) >= 0)
 	{
 		address.sin_family = AF_INET;
@@ -192,15 +207,17 @@ static void tcp_server_thread(void* argument)
 				if(accept_sock >= 0)
 				{
 					client_socket01.accept_sock = accept_sock;
-					//client_socket01.remotehost = (struct sockaddr_in)remotehost;
 					client_socket01.remotehost.sin_addr = remotehost.sin_addr;
 					client_socket01.remotehost.sin_family = remotehost.sin_family;
 					client_socket01.remotehost.sin_len = remotehost.sin_len;
 					client_socket01.remotehost.sin_port = remotehost.sin_port;
-					memcpy(&(client_socket01.remotehost.sin_zero),&(remotehost.sin_zero),8);
-
+					memcpy(&(client_socket01.remotehost.sin_zero),&(remotehost.sin_zero),(size_t)SIN_ZERO_LEN);
 					client_socket01.sockaddrsize = sockaddrsize;
-					client_socket_TaskHandle = osThreadNew(client_socket_thread, (void*)&client_socket01, &client_socket_Task_attributes);
+
+					if(modbus_TaskHandle == NULL)
+						modbus_TaskHandle = osThreadNew(modbus_thread, NULL, &modbus_Task_attributes);
+
+					//client_socket_TaskHandle = osThreadNew(client_socket_thread, (void*)&client_socket01, &client_socket_Task_attributes);
 				}
 			}
 		}
@@ -243,5 +260,19 @@ static void client_socket_thread(void* argument)
 	}
 }
 
+static void modbus_thread(void* argument)
+{
+	for(;;)
+	{
+		nmbs_server_poll(&nmbs);
+		taskYIELD();
+	}
+
+}
+
+ts_client_socket get_client_socket01(void)
+{
+	return client_socket01;
+}
 /* USER CODE END Application */
 

@@ -1,5 +1,7 @@
-../Core/Src/freertos.c:101:6:vApplicationStackOverflowHook	1
-../Core/Src/freertos.c:115:6:MX_FREERTOS_Init	1
-../Core/Src/freertos.c:157:6:StartDefaultTask	1
-../Core/Src/freertos.c:174:13:tcp_server_thread	4
-../Core/Src/freertos.c:215:13:client_socket_thread	2
+../Core/Src/freertos.c:115:6:vApplicationStackOverflowHook	1
+../Core/Src/freertos.c:129:6:MX_FREERTOS_Init	1
+../Core/Src/freertos.c:171:6:StartDefaultTask	1
+../Core/Src/freertos.c:188:13:tcp_server_thread	4
+../Core/Src/freertos.c:232:13:client_socket_thread	2
+../Core/Src/freertos.c:263:13:modbus_thread	1
+../Core/Src/freertos.c:273:18:get_client_socket01	1
