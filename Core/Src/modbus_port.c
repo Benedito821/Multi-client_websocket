@@ -3,21 +3,8 @@
 #include <string.h>
 #include "app.h"
 
-#ifdef NMBS_TCP
 static int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 static int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
-#endif
-#ifdef NMBS_RTU
-static int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
-static int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
-
-#if MB_UART_DMA
-#include "queue.h"
-xQueueHandle rtu_rx_q;
-uint8_t rtu_rx_b[MB_RX_BUF_SIZE];
-#endif
-
-#endif
 
 static nmbs_server_t* server;
 
@@ -37,16 +24,10 @@ nmbs_error nmbs_server_init(nmbs_t* nmbs, nmbs_server_t* _server) {
     nmbs_callbacks cb;
 
     nmbs_platform_conf_create(&conf);
-#ifdef NMBS_TCP
+
     conf.transport = NMBS_TRANSPORT_TCP;
     conf.read = read_socket;
     conf.write = write_socket;
-#endif
-#ifdef NMBS_RTU
-    conf.transport = NMBS_TRANSPORT_RTU;
-    conf.read = read_serial;
-    conf.write = write_serial;
-#endif
 
     server = _server;
 
@@ -57,11 +38,6 @@ nmbs_error nmbs_server_init(nmbs_t* nmbs, nmbs_server_t* _server) {
     cb.write_multiple_coils = server_write_multiple_coils;
     cb.write_single_register = server_write_single_register;
     cb.write_multiple_registers = server_write_multiple_registers;
-
-#if MB_UART_DMA
-    rtu_rx_q = xQueueCreate(MB_RX_BUF_SIZE, sizeof(uint8_t));
-    HAL_UARTEx_ReceiveToIdle_DMA(&MB_UART, rtu_rx_b, MB_RX_BUF_SIZE);
-#endif
 
     nmbs_error status = nmbs_server_create(nmbs, server->id, &conf, &cb);
     if (status != NMBS_ERROR_NONE) {
@@ -78,16 +54,10 @@ nmbs_error nmbs_client_init(nmbs_t* nmbs) {
     nmbs_platform_conf conf;
 
     nmbs_platform_conf_create(&conf);
-#ifdef NMBS_TCP
+
     conf.transport = NMBS_TRANSPORT_TCP;
     conf.read = read_socket;
     conf.write = write_socket;
-#endif
-#ifdef NMBS_RTU
-    conf.transport = NMBS_TRANSPORT_RTU;
-    conf.read = read_serial;
-    conf.write = write_serial;
-#endif
 
     nmbs_error status = nmbs_client_create(nmbs, &conf);
     if (status != NMBS_ERROR_NONE) {
@@ -177,8 +147,6 @@ static nmbs_error server_write_multiple_registers(uint16_t address, uint16_t qua
     return NMBS_ERROR_NONE;
 }
 
-
-#ifdef NMBS_TCP
 int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
     uint32_t tick_start = HAL_GetTick();
     ts_client_socket client_sock01 = get_client_socket01();
@@ -193,6 +161,11 @@ int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     while ( (ret_sock = recvfrom(accept_sock,buf,count,0,(struct sockaddr*)&remotehost,&sockaddrsize)) != count) {
         if (HAL_GetTick() - tick_start >= (uint32_t) byte_timeout_ms) {
             return 0;
+        }
+        if(ret_sock < 0)
+        {
+        	close(ret_sock);
+        	return 0;
         }
     }
     return count;
@@ -210,58 +183,3 @@ int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms
 	return sendto(accept_sock,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
 
 }
-#endif
-
-#ifdef NMBS_RTU
-static int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-#if MB_UART_DMA
-    uint32_t tick_start = HAL_GetTick();
-    while (uxQueueMessagesWaiting(rtu_rx_q) < count) {
-        if (HAL_GetTick() - tick_start >= (uint32_t) byte_timeout_ms) {
-            return 0;
-        }
-    }
-    for (int i = 0; i < count; i++) {
-        xQueueReceive(rtu_rx_q, buf + i, 1);
-    }
-    return count;
-#else
-    HAL_StatusTypeDef status = HAL_UART_Receive(&MB_UART, buf, count, byte_timeout_ms);
-    if (status == HAL_OK) {
-        return count;
-    }
-    else {
-        return 0;
-    }
-#endif
-}
-static int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-#if MB_UART_DMA
-    HAL_UART_Transmit_DMA(&MB_UART, buf, count);
-#else
-    HAL_StatusTypeDef status = HAL_UART_Transmit(&MB_UART, buf, count, byte_timeout_ms);
-    if (status == HAL_OK) {
-        return count;
-    }
-    else {
-        return 0;
-    }
-#endif
-}
-
-
-#if MB_UART_DMA
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    if (huart == &MB_UART) {
-        for (int i = 0; i < Size; i++) {
-            xQueueSendFromISR(rtu_rx_q, rtu_rx_b + i, &xHigherPriorityTaskWoken);
-        }
-        HAL_UARTEx_ReceiveToIdle_DMA(huart, rtu_rx_b, MB_RX_BUF_SIZE);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-    // You may add your additional uart handler below
-}
-#endif
-
-#endif

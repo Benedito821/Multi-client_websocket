@@ -10,23 +10,10 @@ extern "C" {
 #define COIL_BUF_SIZE 256
 #define REG_BUF_SIZE 256
 
-// NanoModbus include
 #include "nanomodbus.h"
 #include "stm32f7xx_hal.h"
 
-#ifdef NMBS_TCP
-// modbus tcp
-#define MB_SOCKET 1
 #include "lwip/sockets.h"
-#endif
-
-#ifdef NMBS_RTU
-// modbus rtu
-#define MB_UART huart1
-#define MB_UART_DMA 1
-#define MB_RX_BUF_SIZE 256
-extern UART_HandleTypeDef MB_UART;
-#endif
 
 typedef struct tNmbsServer {
     uint8_t id;

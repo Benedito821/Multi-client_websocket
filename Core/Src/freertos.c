@@ -53,14 +53,6 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-osThreadId_t client_socket_TaskHandle;
-
-const osThreadAttr_t client_socket_Task_attributes = {
-  .name = "client_socket_thread",
-  .stack_size = 2*1024,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
 osThreadId_t modbus_TaskHandle;
 
 const osThreadAttr_t modbus_Task_attributes = {
@@ -96,10 +88,10 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
-static void client_socket_thread(void* argument);
 static void modbus_thread(void* argument);
 /* USER CODE END FunctionPrototypes */
 
@@ -216,8 +208,6 @@ static void tcp_server_thread(void* argument)
 
 					if(modbus_TaskHandle == NULL)
 						modbus_TaskHandle = osThreadNew(modbus_thread, NULL, &modbus_Task_attributes);
-
-					//client_socket_TaskHandle = osThreadNew(client_socket_thread, (void*)&client_socket01, &client_socket_Task_attributes);
 				}
 			}
 		}
@@ -226,37 +216,6 @@ static void tcp_server_thread(void* argument)
 			close(sock);
 			return;
 		}
-	}
-}
-
-static void client_socket_thread(void* argument)
-{
-	int ret,accept_sock;
-	struct sockaddr_in remotehost;
-	socklen_t sockaddrsize;
-	ts_client_socket* arg_client_socket;
-	arg_client_socket = (ts_client_socket*)argument;
-	remotehost = arg_client_socket->remotehost;
-	sockaddrsize = arg_client_socket->sockaddrsize;
-	accept_sock = arg_client_socket->accept_sock;
-	for(;;)
-	{
-		ret = recvfrom(accept_sock,out_buffer,SOCK_DATA_BUFF_LEN,0,(struct sockaddr*)&remotehost,&sockaddrsize);
-		if(ret > 0)
-		{
-			if(strcmp(out_buffer,"-c") == 0)
-			{
-				strcpy(out_buffer,"Bye Bye from server!");
-				sendto(accept_sock,out_buffer,strlen(out_buffer),0,(struct sockaddr*)&remotehost,sockaddrsize);
-				close(accept_sock);
-				memset(out_buffer,0,(size_t)SOCK_DATA_BUFF_LEN);
-				osThreadExit();
-			}
-			stack_control_var = xPortGetMinimumEverFreeHeapSize();
-			memset(out_buffer,0,(size_t)SOCK_DATA_BUFF_LEN);
-		}
-
-
 	}
 }
 
