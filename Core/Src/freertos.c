@@ -35,7 +35,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SOCK_DATA_BUFF_LEN 150
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -53,14 +52,6 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-osThreadId_t client_socket_TaskHandle;
-
-const osThreadAttr_t client_socket_Task_attributes = {
-  .name = "client_socket_thread",
-  .stack_size = 2*1024,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
 osThreadId_t modbus_TaskHandle;
 
 const osThreadAttr_t modbus_Task_attributes = {
@@ -70,10 +61,6 @@ const osThreadAttr_t modbus_Task_attributes = {
 };
 
 ts_client_socket client_socket01;
-
-size_t stack_control_var = 0;
-
-char out_buffer[SOCK_DATA_BUFF_LEN] = {0};
 
 static nmbs_t nmbs;
 
@@ -100,7 +87,6 @@ const osThreadAttr_t defaultTask_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
-static void client_socket_thread(void* argument);
 static void modbus_thread(void* argument);
 /* USER CODE END FunctionPrototypes */
 
