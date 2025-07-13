@@ -3,6 +3,8 @@
 #include <string.h>
 #include "app.h"
 
+extern osThreadId_t modbus_TaskHandle;
+
 static int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 static int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 
@@ -151,20 +153,18 @@ int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     uint32_t tick_start = HAL_GetTick();
     ts_client_socket client_sock01 = get_client_socket01();
     int ret_sock=0;
-	int accept_sock;
 	struct sockaddr_in remotehost;
 	socklen_t sockaddrsize;
 	remotehost = client_sock01.remotehost;
 	sockaddrsize = client_sock01.sockaddrsize;
-	accept_sock = client_sock01.accept_sock;
 
-    while ( (ret_sock = recvfrom(accept_sock,buf,count,0,(struct sockaddr*)&remotehost,&sockaddrsize)) != count) {
+    while ( (ret_sock = recvfrom(MB_SOCKET_ID,buf,count,0,(struct sockaddr*)&remotehost,&sockaddrsize)) != count) {
         if (HAL_GetTick() - tick_start >= (uint32_t) byte_timeout_ms) {
             return 0;
         }
         if(ret_sock < 0)
         {
-        	close(ret_sock);
+        	close(MB_SOCKET_ID);
         	return 0;
         }
     }
@@ -173,13 +173,11 @@ int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
 
 int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
 	ts_client_socket client_sock01 = get_client_socket01();
-	int accept_sock;
 	struct sockaddr_in remotehost;
 	socklen_t sockaddrsize;
 	remotehost = client_sock01.remotehost;
 	sockaddrsize = client_sock01.sockaddrsize;
-	accept_sock = client_sock01.accept_sock;
 
-	return sendto(accept_sock,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
+	return sendto(MB_SOCKET_ID,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
 
 }

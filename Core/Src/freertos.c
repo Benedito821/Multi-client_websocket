@@ -53,6 +53,14 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
+osThreadId_t client_socket_TaskHandle;
+
+const osThreadAttr_t client_socket_Task_attributes = {
+  .name = "client_socket_thread",
+  .stack_size = 2*1024,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
 osThreadId_t modbus_TaskHandle;
 
 const osThreadAttr_t modbus_Task_attributes = {
@@ -92,6 +100,7 @@ const osThreadAttr_t defaultTask_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
+static void client_socket_thread(void* argument);
 static void modbus_thread(void* argument);
 /* USER CODE END FunctionPrototypes */
 
