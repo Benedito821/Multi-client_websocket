@@ -1,6 +1,0 @@
-../Core/Src/freertos.c:107:6:vApplicationStackOverflowHook	16	static,ignoring_inline_asm
-../Core/Src/freertos.c:121:6:MX_FREERTOS_Init	8	static
-../Core/Src/freertos.c:163:6:StartDefaultTask	16	static
-../Core/Src/freertos.c:180:13:tcp_server_thread	64	static
-../Core/Src/freertos.c:222:13:modbus_thread	16	static,ignoring_inline_asm
-../Core/Src/freertos.c:232:18:get_client_socket01	24	static
