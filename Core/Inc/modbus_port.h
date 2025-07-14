@@ -7,8 +7,8 @@ extern "C" {
 
 #define MB_SOCKET_ID 1U
 // Max size of coil and register area
-#define COIL_BUF_SIZE 256
-#define REG_BUF_SIZE 256
+#define COIL_BUF_SIZE 256U
+#define REG_BUF_SIZE 256U
 
 #include "nanomodbus.h"
 #include "stm32f7xx_hal.h"

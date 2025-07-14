@@ -3,7 +3,9 @@
 #include <string.h>
 #include "app.h"
 
-extern osThreadId_t modbus_TaskHandle;
+extern ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS];
+
+extern nmbs_t nmbs;
 
 static int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 static int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
@@ -150,34 +152,38 @@ static nmbs_error server_write_multiple_registers(uint16_t address, uint16_t qua
 }
 
 int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-    uint32_t tick_start = HAL_GetTick();
-    ts_client_socket client_sock01 = get_client_socket01();
-    int ret_sock=0;
-	struct sockaddr_in remotehost;
-	socklen_t sockaddrsize;
-	remotehost = client_sock01.remotehost;
-	sockaddrsize = client_sock01.sockaddrsize;
 
-    while ( (ret_sock = recvfrom(MB_SOCKET_ID,buf,count,0,(struct sockaddr*)&remotehost,&sockaddrsize)) != count) {
-        if (HAL_GetTick() - tick_start >= (uint32_t) byte_timeout_ms) {
-            return 0;
-        }
-        if(ret_sock < 0)
-        {
-        	close(MB_SOCKET_ID);
-        	return 0;
-        }
-    }
-    return count;
+			int i = 0;
+			for ( i = 0; i < MAX_TCP_SOCK_CLIENTS; i++)
+			{
+				if (clients_sock_arr[i].in_use == true)
+				{
+					memcpy(buf,clients_sock_arr[i].client_data + nmbs.msg.buf_idx,count);
+					break;
+				}
+				else if (clients_sock_arr[i].in_use == false && i == (MAX_TCP_SOCK_CLIENTS-1))
+				{
+					return 0;
+				}
+			}
+
+			return count;
 }
 
 int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-	ts_client_socket client_sock01 = get_client_socket01();
 	struct sockaddr_in remotehost;
 	socklen_t sockaddrsize;
-	remotehost = client_sock01.remotehost;
-	sockaddrsize = client_sock01.sockaddrsize;
 
-	return sendto(MB_SOCKET_ID,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
 
+	for (int i = 0; i < MAX_TCP_SOCK_CLIENTS; i++)
+	{
+		if (clients_sock_arr[i].in_use == true)
+		{
+			remotehost = clients_sock_arr[i].remotehost;
+			sockaddrsize = clients_sock_arr[i].sockaddrsize_;
+			clients_sock_arr[i].in_use = false;
+			return sendto(clients_sock_arr[i].accept_sock,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
+		}
+	}
+	return 0;
 }
