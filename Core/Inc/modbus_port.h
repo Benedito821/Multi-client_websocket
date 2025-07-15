@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define MB_SOCKET_ID 1U
+#define MODBUS_TCP_PORT 502U
 // Max size of coil and register area
 #define COIL_BUF_SIZE 256U
 #define REG_BUF_SIZE 256U
@@ -19,6 +19,7 @@ typedef struct tNmbsServer {
     uint8_t id;
     uint8_t coils[COIL_BUF_SIZE];
     uint16_t regs[REG_BUF_SIZE];
+    uint16_t input_regs[REG_BUF_SIZE];
 } nmbs_server_t;
 
 nmbs_error nmbs_server_init(nmbs_t* nmbs, nmbs_server_t* server);

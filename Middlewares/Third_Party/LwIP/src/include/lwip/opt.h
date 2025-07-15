@@ -433,7 +433,7 @@
  * (requires the LWIP_TCP option)
  */
 #if !defined MEMP_NUM_TCP_PCB || defined __DOXYGEN__
-#define MEMP_NUM_TCP_PCB                5
+#define MEMP_NUM_TCP_PCB                6
 #endif
 
 /**
@@ -529,7 +529,7 @@
  * (only needed if you use the sequential API, like api_lib.c)
  */
 #if !defined MEMP_NUM_NETCONN || defined __DOXYGEN__
-#define MEMP_NUM_NETCONN                4
+#define MEMP_NUM_NETCONN                6
 #endif
 
 /**

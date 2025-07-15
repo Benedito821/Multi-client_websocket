@@ -7,7 +7,8 @@
 #include "nanomodbus.h"
 #include "modbus_port.h"
 
-#define MAX_TCP_SOCK_CLIENTS 4U
+#define MAX_TCP_SOCK_CLIENTS (MEMP_NUM_NETCONN-1) //Max possible sockets is MEMP_NUM_NETCONN-1
+
 typedef struct client_socket
 {
 	int accept_sock,
@@ -18,6 +19,7 @@ typedef struct client_socket
 	bool in_use;
 }ts_client_socket;
 
-ts_client_socket get_client_socket01(void);
-
+const nmbs_t get_nmbs(void);
+ts_client_socket* get_clients_arr(void);
+void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_in* src);
 #endif /* INC_APP_H_ */

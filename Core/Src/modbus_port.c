@@ -5,8 +5,6 @@
 
 extern ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS];
 
-extern nmbs_t nmbs;
-
 static int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 static int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
 
@@ -15,6 +13,8 @@ static nmbs_server_t* server;
 static nmbs_error server_read_coils(uint16_t address, uint16_t quantity, nmbs_bitfield coils_out, uint8_t unit_id,
                                     void* arg);
 static nmbs_error server_read_holding_registers(uint16_t address, uint16_t quantity, uint16_t* registers_out,
+                                                uint8_t unit_id, void* arg);
+static nmbs_error server_read_input_registers(uint16_t address, uint16_t quantity, uint16_t* registers_out,
                                                 uint8_t unit_id, void* arg);
 static nmbs_error server_write_single_coil(uint16_t address, bool value, uint8_t unit_id, void* arg);
 static nmbs_error server_write_multiple_coils(uint16_t address, uint16_t quantity, const nmbs_bitfield coils,
@@ -42,6 +42,7 @@ nmbs_error nmbs_server_init(nmbs_t* nmbs, nmbs_server_t* _server) {
     cb.write_multiple_coils = server_write_multiple_coils;
     cb.write_single_register = server_write_single_register;
     cb.write_multiple_registers = server_write_multiple_registers;
+    cb.read_input_registers = server_read_input_registers;
 
     nmbs_error status = nmbs_server_create(nmbs, server->id, &conf, &cb);
     if (status != NMBS_ERROR_NONE) {
@@ -111,6 +112,20 @@ static nmbs_error server_read_holding_registers(uint16_t address, uint16_t quant
     return NMBS_ERROR_NONE;
 }
 
+static nmbs_error server_read_input_registers(uint16_t address, uint16_t quantity, uint16_t* registers_out,
+                                                uint8_t unit_id, void* arg) {
+    nmbs_server_t* server = get_server(unit_id);
+
+    for (size_t i = 0; i < quantity; i++) {
+        if (address > REG_BUF_SIZE) {
+            return NMBS_ERROR_INVALID_REQUEST;
+        }
+        registers_out[i] = server->input_regs[address++];
+    }
+
+    return NMBS_ERROR_NONE;
+}
+
 static nmbs_error server_write_single_coil(uint16_t address, bool value, uint8_t unit_id, void* arg) {
     uint8_t coil = 0;
     if (value) {
@@ -152,37 +167,40 @@ static nmbs_error server_write_multiple_registers(uint16_t address, uint16_t qua
 }
 
 int32_t read_socket(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
+	const nmbs_t nmbs_ = get_nmbs();
 
-			int i = 0;
-			for ( i = 0; i < MAX_TCP_SOCK_CLIENTS; i++)
-			{
-				if (clients_sock_arr[i].in_use == true)
-				{
-					memcpy(buf,clients_sock_arr[i].client_data + nmbs.msg.buf_idx,count);
-					break;
-				}
-				else if (clients_sock_arr[i].in_use == false && i == (MAX_TCP_SOCK_CLIENTS-1))
-				{
-					return 0;
-				}
-			}
+	ts_client_socket* cli_arr = get_clients_arr();
 
-			return count;
+	for (uint16_t idx = 0; idx < MAX_TCP_SOCK_CLIENTS; idx++)
+	{
+		if (cli_arr[idx].in_use == true)
+		{
+			memcpy(buf,cli_arr[idx].client_data + nmbs_.msg.buf_idx,count);
+			break;
+		}
+		else if (cli_arr[idx].in_use == false && idx == (MAX_TCP_SOCK_CLIENTS-1))
+		{
+			return 0;
+		}
+	}
+
+	return count;
 }
 
 int32_t write_socket(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
 	struct sockaddr_in remotehost;
 	socklen_t sockaddrsize;
 
+	ts_client_socket* cli_arr = get_clients_arr();
 
-	for (int i = 0; i < MAX_TCP_SOCK_CLIENTS; i++)
+	for (uint16_t idx = 0; idx < MAX_TCP_SOCK_CLIENTS; idx++)
 	{
-		if (clients_sock_arr[i].in_use == true)
+		if (cli_arr[idx].in_use == true)
 		{
-			remotehost = clients_sock_arr[i].remotehost;
-			sockaddrsize = clients_sock_arr[i].sockaddrsize_;
-			clients_sock_arr[i].in_use = false;
-			return sendto(clients_sock_arr[i].accept_sock,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
+			remotehost_struct_deep_copy(&remotehost,&cli_arr[idx].remotehost);
+			sockaddrsize = cli_arr[idx].sockaddrsize_;
+			cli_arr[idx].in_use = false;
+			return sendto(cli_arr[idx].accept_sock,buf,count,0,(struct sockaddr*)&remotehost,sockaddrsize);
 		}
 	}
 	return 0;

@@ -52,28 +52,24 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-osThreadId_t modbus_TaskHandle;
-
-const osThreadAttr_t modbus_Task_attributes = {
-  .name = "modbus_thread",
-  .stack_size = 2*1024,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
 ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
-nmbs_t nmbs;
+static nmbs_t nmbs;
 
 static nmbs_server_t nmbs_server = {
         .id = 0x01,
         .coils =
                 {
-                        0,
+					0,
                 },
         .regs =
                 {
-                        0,
+					0,
                 },
+		.input_regs =
+					{
+						0,
+					},
 };
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
@@ -87,7 +83,6 @@ const osThreadAttr_t defaultTask_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
-static void modbus_thread(void* argument);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -174,19 +169,18 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 static void tcp_server_thread(void* argument)
 {
-	uint16_t port = 502;
+	uint16_t port = MODBUS_TCP_PORT;
 	int sock;
 	struct sockaddr_in address,remotehost;
 	socklen_t sockaddrsize = sizeof(remotehost);
 
-   // Initialize client array
-	for (int i = 0; i < MAX_TCP_SOCK_CLIENTS; i++) {
-		clients_sock_arr[i] = (ts_client_socket){.accept_sock = -1,
+	for (uint16_t idx = 0; idx < MAX_TCP_SOCK_CLIENTS; idx++) {
+		clients_sock_arr[idx] = (ts_client_socket){.accept_sock = -1,
 												   .data_count = 0,
 												   .sockaddrsize_ = sockaddrsize,
 												   .in_use = false
 												};
-		memset(clients_sock_arr[i].client_data,0,(size_t)COIL_BUF_SIZE);
+		memset(clients_sock_arr[idx].client_data,0,(size_t)COIL_BUF_SIZE);
 	}
 
 	nmbs_server_init(&nmbs, &nmbs_server);
@@ -196,8 +190,9 @@ static void tcp_server_thread(void* argument)
 		fcntl(sock, F_SETFL, O_NONBLOCK);
 
 		address.sin_family = AF_INET;
-		address.sin_addr.s_addr = INADDR_ANY; // Bind to all interfaces
+		address.sin_addr.s_addr = INADDR_ANY;
 		address.sin_port = htons(port);
+
 		if(bind(sock,(struct sockaddr*)&address,sizeof(address)) == 0)
 		{
 			listen(sock,5);
@@ -228,6 +223,7 @@ static void tcp_server_thread(void* argument)
 
 				if(activity < 0)
 				{
+					perror("select error");
 					continue;
 				}
 
@@ -236,13 +232,12 @@ static void tcp_server_thread(void* argument)
 					int new_sock = accept(sock,(struct sockaddr*)&remotehost,(socklen_t*)&sockaddrsize);
 					if (new_sock > 0)
 					{
-						// Find empty slot
 						int slot = -1;
-						for (int i = 0; i < MAX_TCP_SOCK_CLIENTS; i++)
+						for (uint16_t idx = 0; idx < MAX_TCP_SOCK_CLIENTS; idx++)
 						{
-							if (clients_sock_arr[i].accept_sock <= 0)
+							if (clients_sock_arr[idx].accept_sock <= 0)
 							{
-								slot = i;
+								slot = idx;
 								break;
 							}
 						}
@@ -251,17 +246,11 @@ static void tcp_server_thread(void* argument)
 						{
 							fcntl(new_sock, F_SETFL, O_NONBLOCK);
 							clients_sock_arr[slot].accept_sock = new_sock;
-
-							clients_sock_arr[slot].remotehost.sin_addr = remotehost.sin_addr;
-							clients_sock_arr[slot].remotehost.sin_family = remotehost.sin_family;
-							clients_sock_arr[slot].remotehost.sin_len = remotehost.sin_len;
-							clients_sock_arr[slot].remotehost.sin_port = remotehost.sin_port;
-							memcpy(&(clients_sock_arr[slot].remotehost.sin_zero),&(remotehost.sin_zero),8);
-
+							remotehost_struct_deep_copy(&clients_sock_arr[slot].remotehost,&remotehost);
 						}
 						else
 						{
-							close(new_sock); // No room for new client
+							close(new_sock);
 						}
 					}
 				}
@@ -281,11 +270,9 @@ static void tcp_server_thread(void* argument)
 							clients_sock_arr[client_pos].in_use = true;
 							clients_sock_arr[client_pos].data_count = ret;
 							nmbs_server_poll(&nmbs);
-							//send(clients_sock_arr[client_pos].accept_sock,"OK",2,0);
 						}
 					}
 				}
-
 			}
 		 }
 		else
@@ -302,19 +289,23 @@ static void tcp_server_thread(void* argument)
 	}
 }
 
-static void modbus_thread(void* argument)
+const nmbs_t get_nmbs(void)
 {
-	for(;;)
-	{
-		nmbs_server_poll(&nmbs);
-		taskYIELD();
-	}
-
+	return nmbs;
 }
 
-ts_client_socket get_client_socket01(void)
+ts_client_socket* get_clients_arr(void)
 {
-	//return client_socket01;
+	return clients_sock_arr;
+}
+
+void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_in* src)
+{
+	dest->sin_addr = src->sin_addr;
+	dest->sin_family = src->sin_family;
+	dest->sin_len = src->sin_len;
+	dest->sin_port = src->sin_port;
+	memcpy(&(dest->sin_zero),src->sin_zero,SIN_ZERO_LEN);
 }
 /* USER CODE END Application */
 
