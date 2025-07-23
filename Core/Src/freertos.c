@@ -52,7 +52,7 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
+static ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
 static nmbs_t nmbs;
 

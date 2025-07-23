@@ -4,8 +4,8 @@ Credits to [@debevv](https://github.com/debevv/nanoMODBUS) for the modbus librar
 
 The library supports up to as much TCP clients as defined by:
 
-**#define MEMP_NUM_TCP_PCB
-#define MEMP_NUM_NETCONN**
+**#define MEMP_NUM_TCP_PCB**
+**#define MEMP_NUM_NETCONN**
 
 An important note here is that during the tests I was able to connect only (MEMP_NUM_TCP_PCB -1) , (MEMP_NUM_NETCONN - 1) clients. Both constants need to be updated at the same time,otherwise there could be issues during accept() or connect(). The default number of clients is 5.
 
