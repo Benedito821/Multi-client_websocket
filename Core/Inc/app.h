@@ -8,6 +8,7 @@
 #include "modbus_port.h"
 
 #define MAX_TCP_SOCK_CLIENTS (MEMP_NUM_NETCONN-1) //Max possible sockets is MEMP_NUM_NETCONN-1
+#define HTTP_PORT 80
 
 typedef struct client_socket
 {

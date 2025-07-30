@@ -34,8 +34,8 @@
           <LinkSettings>
             <LinkAdditionalLibs />
           </LinkSettings>
-          <heapSize>0x200</heapSize>
-          <stackSize>0x400</stackSize>
+          <heapSize>0x2000</heapSize>
+          <stackSize>0x4000</stackSize>
           <cpuclock>209.375</cpuclock>
           <board>STM32F746G-DISCO</board>
           <debugprobe>swd</debugprobe>
@@ -64,6 +64,7 @@
             <include>Middlewares\Third_Party\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</include>
             <include>Drivers\BSP\Components\lan8742</include>
             <include>Middlewares\Third_Party\LwIP\src\include\netif\ppp</include>
+            <include>Middlewares\Third_Party\LwIP\src\apps\http</include>
             <include>Drivers\CMSIS\Device\ST\STM32F7xx\Include</include>
             <include>Middlewares\Third_Party\LwIP\src\include\lwip</include>
             <include>Middlewares\Third_Party\LwIP\src\include\lwip\apps</include>
@@ -107,6 +108,12 @@
         </sourceEntry>
         <sourceEntry>
           <name>Middlewares</name>
+          <file>
+            <name>Third_Party/LwIP/src/apps/httpd/fsdata.c</name>
+            <excluded>
+              <configuration>tcp_server_socket</configuration>
+            </excluded>
+          </file>
         </sourceEntry>
       </sourceEntries>
       <Groups />

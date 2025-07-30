@@ -26,6 +26,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app.h"
+#include "fs.h"
+#include "stdio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,7 +41,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -52,25 +53,21 @@ const osThreadAttr_t tcp_server_Task_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
+osThreadId_t httpServerTaskHandle;
+
+const osThreadAttr_t httpServerTask_attributes = {
+  .name = "httpServerTask",
+  .stack_size =  5*1024,
+  .priority = (osPriority_t) osPriorityNormal1,
+};
+
+extern uint32_t _estack, _Min_Stack_Size;
+
 static ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
 static nmbs_t nmbs;
 
-static nmbs_server_t nmbs_server = {
-        .id = 0x01,
-        .coils =
-                {
-					0,
-                },
-        .regs =
-                {
-					0,
-                },
-		.input_regs =
-					{
-						0,
-					},
-};
+static nmbs_server_t nmbs_server = {.id = 0x01,.coils = {0},.regs = {0},.input_regs = {0}};
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -79,10 +76,11 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
+static void http_server_thread(void* argument);
+void send_response(int sock, const char *content_type, const char *data, int len, int close_conn);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -100,6 +98,15 @@ void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 	/* Run time stack overflow checking is performed if
    configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
    called if a stack overflow is detected. */
+}
+
+int _write(int file,char* ptr,int len)
+{
+	for(int DataIdx=0;DataIdx<len;DataIdx++)
+	{
+		ITM_SendChar(*ptr++);
+	}
+	return len;
 }
 /* USER CODE END 4 */
 
@@ -134,7 +141,6 @@ void MX_FREERTOS_Init(void) {
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -156,19 +162,273 @@ void StartDefaultTask(void *argument)
   MX_LWIP_Init();
   /* USER CODE BEGIN StartDefaultTask */
   tcp_server_TaskHandle = osThreadNew(tcp_server_thread, NULL, &tcp_server_Task_attributes);
+  httpServerTaskHandle = osThreadNew(http_server_thread, NULL, &httpServerTask_attributes);
   /* Infinite loop */
   for(;;)
   {
     osDelay(1000);
-    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
+//    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
   }
   /* USER CODE END StartDefaultTask */
 }
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+static void http_server_thread(void* argument)
+{
+	osDelay(300); //let ITM stabilize
+	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
+	int http_sock, http_client_sock;
+    struct sockaddr_in http_addr, http_client;
+    socklen_t http_len = sizeof(http_client);
+    struct fs_file file;
+    char request[512];
+
+    if( (http_sock = socket(AF_INET, SOCK_STREAM, 0)) >= 0)
+    {
+        int enable = 1;
+        setsockopt(http_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+
+        http_addr.sin_family = AF_INET;
+        http_addr.sin_addr.s_addr = INADDR_ANY;
+        http_addr.sin_port = htons(HTTP_PORT);
+
+        if (bind(http_sock, (struct sockaddr*)&http_addr, sizeof(http_addr)) == 0)
+        {
+            listen(http_sock, 16);
+
+            fcntl(http_sock, F_SETFL, O_NONBLOCK);
+
+            for(;;)
+            {
+                if( (http_client_sock = accept(http_sock, (struct sockaddr*)&http_client, &http_len)) >=0 )
+                {
+                	printf("Free heap: %lu\n", xPortGetFreeHeapSize());
+
+                	printf("Stack free: %lu\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
+
+                    struct timeval tv;
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    setsockopt(http_client_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+                    int window = 8192;
+                    setsockopt(http_client_sock, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window));
+
+                    while(1)
+                    {
+                        int bytes_read = recv(http_client_sock, request, sizeof(request) - 1, 0);
+
+                        if(bytes_read <= 0)
+                        	break;
+
+                        request[bytes_read] = '\0';
+
+                        int close_connection = 0;
+
+                        const char *content_type = "text/plain";
+
+                        int api_handled = 0; // Flag for API routes
+
+                        if (strstr(request, "GET / ") || strstr(request, "GET /spacerockets.html"))
+                        {
+                        	content_type = "text/html";
+
+                        	if(fs_open(&file, "/spacerockets.html") == 0)
+                        	{
+                        		printf("spacerockets.html requested\n\r");
+							}
+                        	else
+                        	{
+                        		printf("404.html requested\r\n");
+
+								if( fs_open(&file, "/404.html"))
+								{
+									const char *response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+									send(http_client_sock, response, strlen(response), 0);
+									close(http_client_sock);
+									continue;
+								}
+                        	}
+                        }
+                        else if (strstr(request, "GET /favicon.ico"))
+                        {
+                        	if(fs_open(&file, "/favicon.ico") == 0)
+                        	{
+                        		printf("favicon.ico requested\n\r");
+								content_type = "image/x-icon";
+								close_connection = 1;
+							}
+                        	else
+                        	{
+                        		printf("Error: can not open favicon.ico\r\n");
+                        	    close(http_client_sock);
+                        	    continue;
+                        	}
+                        }
+                        else if (strstr(request, "GET /img/"))
+                        {
+								char *path_start = strstr(request, "GET /img/");
+								if (path_start)
+								{
+									char path[64] = {0};
+									sscanf(path_start, "GET %63s", path);
+
+	                        		printf("%s requested\n\r",path);
+
+									if (fs_open(&file, path) == 0)
+									{
+										if(strstr(path, "sadcat")) //for the 404.html
+										{
+											content_type = "image/jpeg";
+											close_connection = 1;
+										}
+										else if (strstr(path, ".jpg") || strstr(path, ".jpeg"))
+										{
+											content_type = "image/jpeg";
+										}
+										else if (strstr(path, ".png"))
+										{
+											content_type = "image/png";
+										}
+									}
+									else
+									{
+										printf("Error: can not open %s\n\r",path);
+										close(http_client_sock);
+										continue;
+									}
+								}
+						}
+                        else if (strstr(request, "GET /control.html"))
+                        {
+                        	printf("control.html requested\r\n");
+
+                            if(fs_open(&file, "/control.html") == 0)
+                            {
+                                content_type = "text/html";
+                            }
+                        }
+                        else if (strstr(request, "GET /styles.css"))
+                        {
+                        	printf("styles.css requested\r\n");
+
+                            if(fs_open(&file, "/styles.css") == 0)
+                            {
+                                content_type = "text/css";
+                            }
+                        }
+                        else if (strstr(request, "GET /control.js"))
+                        {
+                        	printf("control.js requested\r\n");
+
+                            if(fs_open(&file, "/control.js") == 0)
+                            {
+                                content_type = "application/javascript";
+                            }
+                            else
+                            {
+								printf("Error: can not open control.js\n\r");
+								close(http_client_sock);
+								continue;
+                            }
+                        }
+                        // AJAX Endpoints
+                        else if (strstr(request, "POST /led"))
+                        {
+                            // Parse JSON and toggle LED (pseudo-code)
+                            HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin,(strstr(request, "\"state\":1") ? GPIO_PIN_SET : GPIO_PIN_RESET));
+
+                            const char *response =
+                                "HTTP/1.1 200 OK\r\n"
+                                "Content-Type: application/json\r\n"
+                                "Access-Control-Allow-Origin: *\r\n"
+                                "Content-Length: 16\r\n\r\n"
+                                "{\"status\":\"ok\"}";
+
+                            send(http_client_sock, response, strlen(response), 0);
+                            api_handled = 1;
+                        }
+                        else if (strstr(request, "GET /button-state"))
+                        {
+                            // Read physical button state (pseudo-code)
+                            GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
+                            const char *response =
+                                "HTTP/1.1 200 OK\r\n"
+                                "Content-Type: application/json\r\n"
+                                "Connection: close\r\n"
+								"Access-Control-Allow-Origin: *\r\n"
+                                "Content-Length: 15\r\n\r\n"
+                                "{\"pressed\":%d}";
+
+                            char json[256];
+                            snprintf(json, sizeof(json), response, (btn_state == GPIO_PIN_SET));
+                            send(http_client_sock, json, strlen(json), 0);
+                            api_handled = 1;
+                        }
+                        else
+                        {
+                        	printf("404.html requested\r\n");
+
+                    		if( fs_open(&file, "/404.html"))
+                    		{
+                    			printf("Error: can not open 404.html\r\n");
+                        	    const char *response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                        	    send(http_client_sock, response, strlen(response), 0);
+                        	    close(http_client_sock);
+                        	    continue;
+                    		}
+                    		content_type = "text/html";
+                        }
+
+                        if(!api_handled)
+                        {
+							send_response(http_client_sock, content_type, file.data, file.len, close_connection);
+
+							printf("response sent\r\n");
+
+							fs_close(&file);
+                        }
+
+                        if(close_connection || !strstr(request, "Connection: keep-alive"))
+                        {
+                            break;
+                        }
+                    }
+
+                    shutdown(http_client_sock, SHUT_RDWR);
+
+                    close(http_client_sock);
+                }
+                else
+                {
+                    if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                        osDelay(10);
+                        continue;
+                    }
+                    perror("HTTP accept failed\r\n");
+                }
+            }
+        }
+        else
+        {
+            perror("HTTP bind failed\r\n");
+            close(http_sock);
+            osThreadTerminate(NULL);
+        }
+    }
+    else
+    {
+        perror("HTTP socket creation failed\r\n");
+        osThreadTerminate(NULL);
+    }
+}
+
+
 static void tcp_server_thread(void* argument)
 {
+	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
+
 	uint16_t port = MODBUS_TCP_PORT;
 	int sock;
 	struct sockaddr_in address,remotehost;
@@ -223,7 +483,7 @@ static void tcp_server_thread(void* argument)
 
 				if(activity < 0)
 				{
-					perror("select error");
+					perror("select error\r\n");
 					continue;
 				}
 
@@ -277,15 +537,15 @@ static void tcp_server_thread(void* argument)
 		 }
 		else
 		{
-			perror("bind failed");
+			perror("bind failed\r\n");
 			close(sock);
-			return;
+			osThreadTerminate(NULL);
 		}
 	}
 	else
 	{
-		perror("socket creation failed");
-		return;
+		perror("socket creation failed\r\n");
+		osThreadTerminate(NULL);
 	}
 }
 
@@ -306,6 +566,23 @@ void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_
 	dest->sin_len = src->sin_len;
 	dest->sin_port = src->sin_port;
 	memcpy(&(dest->sin_zero),src->sin_zero,SIN_ZERO_LEN);
+}
+
+void send_response(int sock, const char *content_type, const char *data, int len, int close_conn) {
+    char headers[256];
+    int headers_len = snprintf(headers, sizeof(headers),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "Connection: %s\r\n"
+        "Content-Length: %d\r\n"
+        "\r\n",
+        content_type,
+        close_conn ? "close" : "keep-alive",
+        len
+    );
+
+    send(sock, headers, headers_len, 0);
+    send(sock, data, len, 0);
 }
 /* USER CODE END Application */
 
