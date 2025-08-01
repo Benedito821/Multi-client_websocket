@@ -28,6 +28,7 @@
 #include "app.h"
 #include "fs.h"
 #include "stdio.h"
+#include "sockets.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -186,8 +187,6 @@ static void http_server_thread(void* argument)
 
     if( (http_sock = socket(AF_INET, SOCK_STREAM, 0)) >= 0)
     {
-        int enable = 1;
-        setsockopt(http_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
 
         http_addr.sin_family = AF_INET;
         http_addr.sin_addr.s_addr = INADDR_ANY;
@@ -197,230 +196,107 @@ static void http_server_thread(void* argument)
         {
             listen(http_sock, 16);
 
-            fcntl(http_sock, F_SETFL, O_NONBLOCK);
+            fcntl(http_sock, F_SETFL, O_NONBLOCK);  // Set non-blocking mode
 
             for(;;)
             {
                 if( (http_client_sock = accept(http_sock, (struct sockaddr*)&http_client, &http_len)) >=0 )
                 {
-                	printf("Free heap: %lu\n", xPortGetFreeHeapSize());
+//                	printf("Free heap: %lu\n", (long unsigned int)xPortGetFreeHeapSize());
+//
+//                	printf("Stack free: %lu\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
 
-                	printf("Stack free: %lu\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
+					int bytes_read = recvfrom(http_client_sock, request, sizeof(request), 0,(struct sockaddr*)&http_client, &http_len);
 
-                    struct timeval tv;
-                    tv.tv_sec = 5;
-                    tv.tv_usec = 0;
-                    setsockopt(http_client_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-                    int window = 8192;
-                    setsockopt(http_client_sock, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window));
-
-                    while(1)
-                    {
-                        int bytes_read = recv(http_client_sock, request, sizeof(request) - 1, 0);
-
-                        if(bytes_read <= 0)
-                        	break;
-
-                        request[bytes_read] = '\0';
-
-                        int close_connection = 0;
-
-                        const char *content_type = "text/plain";
-
-                        int api_handled = 0; // Flag for API routes
-
-                        if (strstr(request, "GET / ") || strstr(request, "GET /spacerockets.html"))
-                        {
-                        	content_type = "text/html";
-
-                        	if(fs_open(&file, "/spacerockets.html") == 0)
-                        	{
-                        		printf("spacerockets.html requested\n\r");
+					if(bytes_read > 0)
+					{
+						if(bytes_read >= 5 && (strncmp(request,"GET / ",5) == 0) )
+						{
+							if(strncmp(request,"GET / ",6) == 0 || strncmp(request,"GET /spacerockets.html",22) == 0)
+							{
+			                	printf("spacerockets.html requested\r\n");
+								fs_open(&file,"/spacerockets.html");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
 							}
-                        	else
-                        	{
-                        		printf("404.html requested\r\n");
-
-								if( fs_open(&file, "/404.html"))
-								{
-									const char *response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-									send(http_client_sock, response, strlen(response), 0);
-									close(http_client_sock);
-									continue;
-								}
-                        	}
-                        }
-                        else if (strstr(request, "GET /favicon.ico"))
-                        {
-                        	if(fs_open(&file, "/favicon.ico") == 0)
-                        	{
-                        		printf("favicon.ico requested\n\r");
-								content_type = "image/x-icon";
-								close_connection = 1;
+							else if(strncmp(request,"GET /img/favicon.ico",20)==0)
+							{
+								printf("favicon.ico requested \r\n");
+								fs_open(&file,"/favicon.ico");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
 							}
-                        	else
-                        	{
-                        		printf("Error: can not open favicon.ico\r\n");
-                        	    close(http_client_sock);
-                        	    continue;
-                        	}
-                        }
-                        else if (strstr(request, "GET /img/"))
-                        {
-								char *path_start = strstr(request, "GET /img/");
-								if (path_start)
-								{
-									char path[64] = {0};
-									sscanf(path_start, "GET %63s", path);
+							else if(strncmp(request,"GET /img/nasarocket.jpg",23)==0)
+							{
+								printf("nasarocket.jpg requested \r\n");
+								fs_open(&file,"/img/nasarocket.jpg");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
+							else if(strncmp(request,"GET /img/gracelaunch.jpg",24)==0)
+							{
+								printf("gracelaunch.jpg requested \r\n");
+								fs_open(&file,"/img/gracelaunch.jpg");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
+							else if(strncmp(request,"GET /img/landingrocket.jpeg",27)==0)
+							{
+								printf("landingrocket.jpeg requested \r\n");
+								fs_open(&file,"/img/landingrocket.jpeg");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
+							else if(strncmp(request,"GET /img/rockfactory.jpg",20)==0)
+							{
+								printf("rockfactory.jpg requested \r\n");
+								fs_open(&file,"/img/rockfactory.jpg");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
+							else if(strncmp(request,"GET /img/sadcat.jpeg",20)==0)
+							{
+								printf("sadcat.jpeg requested \r\n");
+								fs_open(&file,"/img/sadcat.jpeg");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
+							else
+							{
+								printf("404.html requested \r\n");
+								fs_open(&file,"/404.html");
+								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
+								fs_close(&file);
+							}
 
-	                        		printf("%s requested\n\r",path);
-
-									if (fs_open(&file, path) == 0)
-									{
-										if(strstr(path, "sadcat")) //for the 404.html
-										{
-											content_type = "image/jpeg";
-											close_connection = 1;
-										}
-										else if (strstr(path, ".jpg") || strstr(path, ".jpeg"))
-										{
-											content_type = "image/jpeg";
-										}
-										else if (strstr(path, ".png"))
-										{
-											content_type = "image/png";
-										}
-									}
-									else
-									{
-										printf("Error: can not open %s\n\r",path);
-										close(http_client_sock);
-										continue;
-									}
-								}
+							request[bytes_read] = '\0';
 						}
-                        else if (strstr(request, "GET /control.html"))
-                        {
-                        	printf("control.html requested\r\n");
-
-                            if(fs_open(&file, "/control.html") == 0)
-                            {
-                                content_type = "text/html";
-                            }
-                        }
-                        else if (strstr(request, "GET /styles.css"))
-                        {
-                        	printf("styles.css requested\r\n");
-
-                            if(fs_open(&file, "/styles.css") == 0)
-                            {
-                                content_type = "text/css";
-                            }
-                        }
-                        else if (strstr(request, "GET /control.js"))
-                        {
-                        	printf("control.js requested\r\n");
-
-                            if(fs_open(&file, "/control.js") == 0)
-                            {
-                                content_type = "application/javascript";
-                            }
-                            else
-                            {
-								printf("Error: can not open control.js\n\r");
-								close(http_client_sock);
-								continue;
-                            }
-                        }
-                        // AJAX Endpoints
-                        else if (strstr(request, "POST /led"))
-                        {
-                            // Parse JSON and toggle LED (pseudo-code)
-                            HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin,(strstr(request, "\"state\":1") ? GPIO_PIN_SET : GPIO_PIN_RESET));
-
-                            const char *response =
-                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: application/json\r\n"
-                                "Access-Control-Allow-Origin: *\r\n"
-                                "Content-Length: 16\r\n\r\n"
-                                "{\"status\":\"ok\"}";
-
-                            send(http_client_sock, response, strlen(response), 0);
-                            api_handled = 1;
-                        }
-                        else if (strstr(request, "GET /button-state"))
-                        {
-                            // Read physical button state (pseudo-code)
-                            GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
-                            const char *response =
-                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: application/json\r\n"
-                                "Connection: close\r\n"
-								"Access-Control-Allow-Origin: *\r\n"
-                                "Content-Length: 15\r\n\r\n"
-                                "{\"pressed\":%d}";
-
-                            char json[256];
-                            snprintf(json, sizeof(json), response, (btn_state == GPIO_PIN_SET));
-                            send(http_client_sock, json, strlen(json), 0);
-                            api_handled = 1;
-                        }
-                        else
-                        {
-                        	printf("404.html requested\r\n");
-
-                    		if( fs_open(&file, "/404.html"))
-                    		{
-                    			printf("Error: can not open 404.html\r\n");
-                        	    const char *response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-                        	    send(http_client_sock, response, strlen(response), 0);
-                        	    close(http_client_sock);
-                        	    continue;
-                    		}
-                    		content_type = "text/html";
-                        }
-
-                        if(!api_handled)
-                        {
-							send_response(http_client_sock, content_type, file.data, file.len, close_connection);
-
-							printf("response sent\r\n");
-
-							fs_close(&file);
-                        }
-
-                        if(close_connection || !strstr(request, "Connection: keep-alive"))
-                        {
-                            break;
-                        }
-                    }
-
-                    shutdown(http_client_sock, SHUT_RDWR);
-
-                    close(http_client_sock);
+					}
+					close(http_client_sock);
+        			printf("socket closed\r\n");
                 }
                 else
                 {
-                    if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                        osDelay(10);
+                    if (errno == EWOULDBLOCK || errno == EAGAIN)
+                    {
+                        osDelay(10);  // Wait 10ms before retrying
                         continue;
                     }
-                    perror("HTTP accept failed\r\n");
+        			printf("accept error\r\n");
                 }
             }
-        }
-        else
-        {
-            perror("HTTP bind failed\r\n");
-            close(http_sock);
-            osThreadTerminate(NULL);
-        }
+
+		}
+		else
+		{
+			printf("Bind error\r\n");
+			close(http_sock);
+		}
     }
     else
     {
-        perror("HTTP socket creation failed\r\n");
-        osThreadTerminate(NULL);
+    	printf("Socket creation fail\r\n");
+    	osThreadTerminate(NULL);
     }
 }
 

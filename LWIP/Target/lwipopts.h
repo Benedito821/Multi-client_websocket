@@ -64,7 +64,7 @@
 /*----- Default Value for TCP_WND: 4096 ---*/
 #define TCP_WND 8192
 /*----- Default Value for TCP_MSS: 536 ---*/
-#define TCP_MSS 1024
+#define TCP_MSS 2048
 /*----- Value in opt.h for TCP_SND_QUEUELEN: (4*TCP_SND_BUF + (TCP_MSS - 1))/TCP_MSS -----*/
 #define TCP_SND_QUEUELEN 9
 /*----- Value in opt.h for TCP_SNDQUEUELOWAT: LWIP_MAX(TCP_SND_QUEUELEN)/2, 5) -*/
@@ -92,7 +92,7 @@
 /*----- Value in opt.h for DEFAULT_ACCEPTMBOX_SIZE: 0 -----*/
 #define DEFAULT_ACCEPTMBOX_SIZE 6
 /*----- Default Value for LWIP_TCP_KEEPALIVE: 0 ---*/
-#define LWIP_TCP_KEEPALIVE 1
+#define LWIP_TCP_KEEPALIVE 0
 /*----- Value in opt.h for RECV_BUFSIZE_DEFAULT: INT_MAX -----*/
 #define RECV_BUFSIZE_DEFAULT 2000000000
 /*----- Default Value for LWIP_HTTPD: 0 ---*/
