@@ -81,7 +81,8 @@ const osThreadAttr_t defaultTask_attributes = {
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
 static void http_server_thread(void* argument);
-void send_response(int sock, const char *content_type, const char *data, int len, int close_conn);
+void send_response(int sock, const char *content_type, const char *data, int len);
+void send_file(const char *path, const char *content_type) ;
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -168,7 +169,6 @@ void StartDefaultTask(void *argument)
   for(;;)
   {
     osDelay(1000);
-//    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
   }
   /* USER CODE END StartDefaultTask */
 }
@@ -183,7 +183,7 @@ static void http_server_thread(void* argument)
     struct sockaddr_in http_addr, http_client;
     socklen_t http_len = sizeof(http_client);
     struct fs_file file;
-    char request[512];
+    char request[512] = {0};
 
     if( (http_sock = socket(AF_INET, SOCK_STREAM, 0)) >= 0)
     {
@@ -202,84 +202,121 @@ static void http_server_thread(void* argument)
             {
                 if( (http_client_sock = accept(http_sock, (struct sockaddr*)&http_client, &http_len)) >=0 )
                 {
-//                	printf("Free heap: %lu\n", (long unsigned int)xPortGetFreeHeapSize());
-//
-//                	printf("Stack free: %lu\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
 
 					int bytes_read = recvfrom(http_client_sock, request, sizeof(request), 0,(struct sockaddr*)&http_client, &http_len);
 
 					if(bytes_read > 0)
 					{
-						if(bytes_read >= 5 && (strncmp(request,"GET / ",5) == 0) )
-						{
-							if(strncmp(request,"GET / ",6) == 0 || strncmp(request,"GET /spacerockets.html",22) == 0)
-							{
-			                	printf("spacerockets.html requested\r\n");
-								fs_open(&file,"/spacerockets.html");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/favicon.ico",20)==0)
-							{
-								printf("favicon.ico requested \r\n");
-								fs_open(&file,"/favicon.ico");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/nasarocket.jpg",23)==0)
-							{
-								printf("nasarocket.jpg requested \r\n");
-								fs_open(&file,"/img/nasarocket.jpg");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/gracelaunch.jpg",24)==0)
-							{
-								printf("gracelaunch.jpg requested \r\n");
-								fs_open(&file,"/img/gracelaunch.jpg");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/landingrocket.jpeg",27)==0)
-							{
-								printf("landingrocket.jpeg requested \r\n");
-								fs_open(&file,"/img/landingrocket.jpeg");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/rockfactory.jpg",20)==0)
-							{
-								printf("rockfactory.jpg requested \r\n");
-								fs_open(&file,"/img/rockfactory.jpg");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else if(strncmp(request,"GET /img/sadcat.jpeg",20)==0)
-							{
-								printf("sadcat.jpeg requested \r\n");
-								fs_open(&file,"/img/sadcat.jpeg");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
-							else
-							{
-								printf("404.html requested \r\n");
-								fs_open(&file,"/404.html");
-								write(http_client_sock,(const unsigned char*)file.data,(size_t)file.len);
-								fs_close(&file);
-							}
+						request[bytes_read] = '\0';
 
-							request[bytes_read] = '\0';
+						void send_file(const char *path, const char *content_type)
+						{
+							printf("%s requested\n", path);
+							if(fs_open(&file, path) == 0) {
+								char headers[256];
+								int len = snprintf(headers, sizeof(headers),
+									"HTTP/1.1 200 OK\r\n"
+									"Content-Type: %s\r\n"
+									"Content-Length: %d\r\n"
+									"Connection: close\r\n\r\n",
+									content_type, file.len);
+								write(http_client_sock, headers, len);
+								write(http_client_sock, file.data, file.len);
+								fs_close(&file);
+							} else {
+								const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
+								write(http_client_sock, resp, strlen(resp));
+							}
+						}
+
+						if(strstr(request, "GET /spacerockets.html") || strstr(request, "GET / "))
+						{
+							send_file("/spacerockets.html", "text/html");
+						}
+						else if(strstr(request, "GET /control.html"))
+						{
+							send_file("/control.html", "text/html");
+						}
+						else if(strstr(request, "GET /img/favicon.ico"))
+						{
+							send_file("/favicon.ico", "image/x-icon");
+						}
+						else if(strstr(request, "GET /img/nasarocket.jpg"))
+						{
+							send_file("/img/nasarocket.jpg", "image/jpeg");
+						}
+						else if(strstr(request, "GET /img/gracelaunch.jpg"))
+						{
+							send_file("/img/gracelaunch.jpg", "image/jpeg");
+						}
+						else if(strstr(request, "GET /img/landingrocket.jpeg"))
+						{
+							send_file("/img/landingrocket.jpeg", "image/jpeg");
+						}
+						else if(strstr(request, "GET /img/rockfactory.jpg"))
+						{
+							send_file("/img/rockfactory.jpg", "image/jpeg");
+						}
+						else if(strstr(request, "GET /img/sadcat.jpeg"))
+						{
+							send_file("/img/sadcat.jpeg", "image/jpeg");
+						}
+						else if(strstr(request, "GET /img/watermark.png"))
+						{
+							send_file("/img/watermark.png", "image/png");
+						}
+						else if(strstr(request, "GET /img/released.png"))
+						{
+							send_file("/img/released.png", "image/png");
+						}
+						else if(strstr(request, "GET /img/pressed.png"))
+						{
+							send_file("/img/pressed.png", "image/png");
+						}
+						else if(strstr(request, "GET /control.js"))
+						{
+							send_file("/control.js", "application/javascript");
+						}
+						else if(strstr(request, "GET /styles.css"))
+						{
+							send_file("/styles.css", "text/css");
+						}
+						else if (strstr(request, "POST /led"))
+						{
+						    HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin,(strstr(request, "\"state\":1") ? GPIO_PIN_SET : GPIO_PIN_RESET));
+
+						    const char *response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+						    write(http_client_sock, response, strlen(response));
+						}
+						else if (strstr(request, "GET /button-state"))
+						{
+							GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
+
+							// Generate the JSON body
+							char json_body[32];
+							int body_len = snprintf(json_body, sizeof(json_body),
+												"{\"pressed\":%d}",  // No spaces or newlines!
+												(btn_state == GPIO_PIN_SET));
+
+							send_response(http_client_sock,"application/json", json_body, body_len);
+
+						}
+
+						else
+						{
+							send_file("/404.html", "text/html");
 						}
 					}
+
 					close(http_client_sock);
+
         			printf("socket closed\r\n");
                 }
                 else
                 {
                     if (errno == EWOULDBLOCK || errno == EAGAIN)
                     {
-                        osDelay(10);  // Wait 10ms before retrying
+                        osDelay(10);
                         continue;
                     }
         			printf("accept error\r\n");
@@ -444,21 +481,20 @@ void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_
 	memcpy(&(dest->sin_zero),src->sin_zero,SIN_ZERO_LEN);
 }
 
-void send_response(int sock, const char *content_type, const char *data, int len, int close_conn) {
-    char headers[256];
+void send_response(int sock, const char *content_type, const char *data, int len)
+{
+    char headers[128];
     int headers_len = snprintf(headers, sizeof(headers),
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: %s\r\n"
-        "Connection: %s\r\n"
+        "Connection: close\r\n"
         "Content-Length: %d\r\n"
         "\r\n",
         content_type,
-        close_conn ? "close" : "keep-alive",
         len
     );
 
-    send(sock, headers, headers_len, 0);
-    send(sock, data, len, 0);
+    write(sock, headers, headers_len);
+    write(sock, data, len);
 }
 /* USER CODE END Application */
-
