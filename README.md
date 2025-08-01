@@ -22,14 +22,14 @@ Stack sizes for the tasks *defaultTask,tcp_server_thread,EthLink,EthIf,tcpip_thr
 The main implementation of the library is located in *freertos.c* file, exported functions and types in *app.h* , modbus-related functions in *modbus_port.c/.h and nanomodbus.c/.h*. 
 
 
-# MODBUS TCP SERVER SIMULATOR
+# MODBUS TCP CLIENTS SIMULATION
 
 ![](https://github.com/Benedito821/Server_cabinet_monitor/blob/http_server_with_ajax/modbus_client_sim.gif)
 
 # CONTROL.html
 Again, MEMP_NUM_TCP_PCB and MEMP_NUM_NETCONN play a huge role when it comes to how many media resources we want to fetch from the server, once we are using a new connection per request(not using keep-alive). Another tweak would be increasing the queue of pending connections(backlog), i.e. listen(my_socket, backlog);. On this web page we toggle the on-board LED and visually show the state of the on-board button(pressed/unpressed). 
-https://github.com/Benedito821/Server_cabinet_monitor/blob/http_server_with_ajax/control_webpage.gif
+![](https://github.com/Benedito821/Server_cabinet_monitor/blob/http_server_with_ajax/control_webpage.gif)
 
 # SPACEROCKETS.html
 Here we test the possibility of loading multiple media resources without losing any of them.
-https://github.com/Benedito821/Server_cabinet_monitor/blob/http_server_with_ajax/spacerockets_webpage.png
+![](https://github.com/Benedito821/Server_cabinet_monitor/blob/http_server_with_ajax/spacerockets_webpage.png)
