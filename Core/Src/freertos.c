@@ -62,8 +62,6 @@ const osThreadAttr_t httpServerTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal1,
 };
 
-extern uint32_t _estack, _Min_Stack_Size;
-
 static ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
 static nmbs_t nmbs;
@@ -196,7 +194,7 @@ static void http_server_thread(void* argument)
         {
             listen(http_sock, 16);
 
-            fcntl(http_sock, F_SETFL, O_NONBLOCK);  // Set non-blocking mode
+            fcntl(http_sock, F_SETFL, O_NONBLOCK);
 
             for(;;)
             {
@@ -209,10 +207,11 @@ static void http_server_thread(void* argument)
 					{
 						request[bytes_read] = '\0';
 
-						void send_file(const char *path, const char *content_type)
+						int send_file(const char *path, const char *content_type)
 						{
 							printf("%s requested\n", path);
-							if(fs_open(&file, path) == 0) {
+							if(fs_open(&file, path) == 0)
+							{
 								char headers[256];
 								int len = snprintf(headers, sizeof(headers),
 									"HTTP/1.1 200 OK\r\n"
@@ -223,63 +222,65 @@ static void http_server_thread(void* argument)
 								write(http_client_sock, headers, len);
 								write(http_client_sock, file.data, file.len);
 								fs_close(&file);
-							} else {
-								const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
-								write(http_client_sock, resp, strlen(resp));
+								return 0;
 							}
+							else
+								return -1;
 						}
+
+						int file_send_err = 0;
 
 						if(strstr(request, "GET /spacerockets.html") || strstr(request, "GET / "))
 						{
-							send_file("/spacerockets.html", "text/html");
+							file_send_err = send_file("/spacerockets.html", "text/html");
 						}
 						else if(strstr(request, "GET /control.html"))
 						{
-							send_file("/control.html", "text/html");
+							file_send_err = send_file("/control.html", "text/html");
 						}
 						else if(strstr(request, "GET /img/favicon.ico"))
 						{
-							send_file("/favicon.ico", "image/x-icon");
+							file_send_err = send_file("/favicon.ico", "image/x-icon");
 						}
 						else if(strstr(request, "GET /img/nasarocket.jpg"))
 						{
-							send_file("/img/nasarocket.jpg", "image/jpeg");
+							file_send_err = send_file("/img/nasarocket.jpg", "image/jpeg");
 						}
 						else if(strstr(request, "GET /img/gracelaunch.jpg"))
 						{
-							send_file("/img/gracelaunch.jpg", "image/jpeg");
+							file_send_err = send_file("/img/gracelaunch.jpg", "image/jpeg");
 						}
 						else if(strstr(request, "GET /img/landingrocket.jpeg"))
 						{
-							send_file("/img/landingrocket.jpeg", "image/jpeg");
+							file_send_err = send_file("/img/landingrocket.jpeg", "image/jpeg");
 						}
 						else if(strstr(request, "GET /img/rockfactory.jpg"))
 						{
-							send_file("/img/rockfactory.jpg", "image/jpeg");
+							file_send_err = send_file("/img/rockfactory.jpg", "image/jpeg");
 						}
 						else if(strstr(request, "GET /img/sadcat.jpeg"))
 						{
-							send_file("/img/sadcat.jpeg", "image/jpeg");
+							file_send_err = send_file("/img/sadcat.jpeg", "image/jpeg");
 						}
 						else if(strstr(request, "GET /img/watermark.png"))
 						{
-							send_file("/img/watermark.png", "image/png");
+							file_send_err = send_file("/img/watermark.png", "image/png");
 						}
 						else if(strstr(request, "GET /img/released.png"))
 						{
-							send_file("/img/released.png", "image/png");
+							file_send_err = send_file("/img/released.png", "image/png");
 						}
 						else if(strstr(request, "GET /img/pressed.png"))
 						{
-							send_file("/img/pressed.png", "image/png");
+							file_send_err = send_file("/img/pressed.png", "image/png");
 						}
 						else if(strstr(request, "GET /control.js"))
 						{
-							send_file("/control.js", "application/javascript");
+							file_send_err = send_file("/control.js", "application/javascript");
 						}
 						else if(strstr(request, "GET /styles.css"))
 						{
-							send_file("/styles.css", "text/css");
+							file_send_err = send_file("/styles.css", "text/css");
 						}
 						else if (strstr(request, "POST /led"))
 						{
@@ -292,7 +293,6 @@ static void http_server_thread(void* argument)
 						{
 							GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
 
-							// Generate the JSON body
 							char json_body[32];
 							int body_len = snprintf(json_body, sizeof(json_body),
 												"{\"pressed\":%d}",  // No spaces or newlines!
@@ -304,8 +304,16 @@ static void http_server_thread(void* argument)
 
 						else
 						{
-							send_file("/404.html", "text/html");
+							file_send_err = send_file("/404.html", "text/html");
 						}
+
+						if(file_send_err == -1)
+						{
+		        			printf("Fatal: could not open the file\r\n");
+							const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
+							write(http_client_sock, resp, strlen(resp));
+						}
+
 					}
 
 					close(http_client_sock);
@@ -322,7 +330,6 @@ static void http_server_thread(void* argument)
         			printf("accept error\r\n");
                 }
             }
-
 		}
 		else
 		{
