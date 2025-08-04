@@ -238,42 +238,6 @@ static void http_server_thread(void* argument)
 						{
 							file_send_err = send_file("/control.html", "text/html");
 						}
-						else if(strstr(request, "GET /img/favicon.ico"))
-						{
-							file_send_err = send_file("/favicon.ico", "image/x-icon");
-						}
-						else if(strstr(request, "GET /img/nasarocket.jpg"))
-						{
-							file_send_err = send_file("/img/nasarocket.jpg", "image/jpeg");
-						}
-						else if(strstr(request, "GET /img/gracelaunch.jpg"))
-						{
-							file_send_err = send_file("/img/gracelaunch.jpg", "image/jpeg");
-						}
-						else if(strstr(request, "GET /img/landingrocket.jpeg"))
-						{
-							file_send_err = send_file("/img/landingrocket.jpeg", "image/jpeg");
-						}
-						else if(strstr(request, "GET /img/rockfactory.jpg"))
-						{
-							file_send_err = send_file("/img/rockfactory.jpg", "image/jpeg");
-						}
-						else if(strstr(request, "GET /img/sadcat.jpeg"))
-						{
-							file_send_err = send_file("/img/sadcat.jpeg", "image/jpeg");
-						}
-						else if(strstr(request, "GET /img/watermark.png"))
-						{
-							file_send_err = send_file("/img/watermark.png", "image/png");
-						}
-						else if(strstr(request, "GET /img/released.png"))
-						{
-							file_send_err = send_file("/img/released.png", "image/png");
-						}
-						else if(strstr(request, "GET /img/pressed.png"))
-						{
-							file_send_err = send_file("/img/pressed.png", "image/png");
-						}
 						else if(strstr(request, "GET /control.js"))
 						{
 							file_send_err = send_file("/control.js", "application/javascript");
@@ -281,6 +245,33 @@ static void http_server_thread(void* argument)
 						else if(strstr(request, "GET /styles.css"))
 						{
 							file_send_err = send_file("/styles.css", "text/css");
+						}
+						else if(strstr(request, "GET /img/"))
+						{
+							char *path_start = strstr(request, "GET /img/");
+							if (path_start)
+							{
+								char path[64] = {0},*content_type = "image/png";
+
+								sscanf(path_start, "GET %63s", path);
+
+								if (strstr(path, ".jpg") || strstr(path, ".jpeg"))
+								{
+									content_type = "image/jpeg";
+								}
+								else if (strstr(path, ".png"))
+								{
+									content_type = "image/png";
+								}
+								else if(strstr(path, ".ico"))
+								{
+									content_type = "image/x-icon";
+								}
+
+								file_send_err = send_file(path, content_type);
+							}
+							else
+								file_send_err = -2;
 						}
 						else if (strstr(request, "POST /led"))
 						{
@@ -295,25 +286,26 @@ static void http_server_thread(void* argument)
 
 							char json_body[32];
 							int body_len = snprintf(json_body, sizeof(json_body),
-												"{\"pressed\":%d}",  // No spaces or newlines!
+												"{\"pressed\":%d}",
 												(btn_state == GPIO_PIN_SET));
 
 							send_response(http_client_sock,"application/json", json_body, body_len);
 
 						}
-
 						else
 						{
 							file_send_err = send_file("/404.html", "text/html");
 						}
 
-						if(file_send_err == -1)
+						if(file_send_err != 0)
 						{
-		        			printf("Fatal: could not open the file\r\n");
+							if(file_send_err == -1)
+								printf("Fatal: could not open the file\r\n");
+							else if(file_send_err == -2)
+								printf("Fatal: wrong path\r\n");
 							const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
 							write(http_client_sock, resp, strlen(resp));
 						}
-
 					}
 
 					close(http_client_sock);
