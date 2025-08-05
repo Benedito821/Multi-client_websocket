@@ -43,12 +43,16 @@
 #define WITH_RTOS 1
 /* Temporary workaround to avoid conflict on errno defined in STM32CubeIDE and lwip sys_arch.c errno */
 #undef LWIP_PROVIDE_ERRNO
+/*----- WITH_MBEDTLS enabled (Since MBEDTLS and FREERTOS are set) -----*/
+#define WITH_MBEDTLS 1
 /*----- CHECKSUM_BY_HARDWARE enabled -----*/
 #define CHECKSUM_BY_HARDWARE 1
 /*-----------------------------------------------------------------------------*/
 
 /* LwIP Stack Parameters (modified compared to initialization value in opt.h) -*/
 /* Parameters set in STM32CubeMX LwIP Configuration GUI -*/
+/*----- Value in opt.h for LWIP_DNS: 0 -----*/
+#define LWIP_DNS 1
 /*----- Value in opt.h for MEM_ALIGNMENT: 1 -----*/
 #define MEM_ALIGNMENT 4
 /*----- Default Value for MEM_SIZE: 1600 ---*/
@@ -64,7 +68,7 @@
 /*----- Default Value for TCP_WND: 4096 ---*/
 #define TCP_WND 8192
 /*----- Default Value for TCP_MSS: 536 ---*/
-#define TCP_MSS 2048
+#define TCP_MSS 1024
 /*----- Value in opt.h for TCP_SND_QUEUELEN: (4*TCP_SND_BUF + (TCP_MSS - 1))/TCP_MSS -----*/
 #define TCP_SND_QUEUELEN 9
 /*----- Value in opt.h for TCP_SNDQUEUELOWAT: LWIP_MAX(TCP_SND_QUEUELEN)/2, 5) -*/
@@ -92,9 +96,11 @@
 /*----- Value in opt.h for DEFAULT_ACCEPTMBOX_SIZE: 0 -----*/
 #define DEFAULT_ACCEPTMBOX_SIZE 6
 /*----- Default Value for LWIP_TCP_KEEPALIVE: 0 ---*/
-#define LWIP_TCP_KEEPALIVE 0
+#define LWIP_TCP_KEEPALIVE 1
 /*----- Value in opt.h for RECV_BUFSIZE_DEFAULT: INT_MAX -----*/
 #define RECV_BUFSIZE_DEFAULT 2000000000
+/*----- Value in opt.h for LWIP_USE_EXTERNAL_MBEDTLS: 0 -----*/
+#define LWIP_USE_EXTERNAL_MBEDTLS 1
 /*----- Default Value for LWIP_HTTPD: 0 ---*/
 #define LWIP_HTTPD 1
 /*----- Value in opt.h for LWIP_STATS: 1 -----*/

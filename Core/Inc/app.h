@@ -9,6 +9,7 @@
 
 #define MAX_TCP_SOCK_CLIENTS (MEMP_NUM_NETCONN-1) //Max possible sockets is MEMP_NUM_NETCONN-1
 #define HTTP_PORT 80
+#define WS_PORT HTTP_PORT
 
 typedef struct client_socket
 {
@@ -19,6 +20,16 @@ typedef struct client_socket
 	socklen_t sockaddrsize_;
 	bool in_use;
 }ts_client_socket;
+
+// WebSocket frame parsing
+typedef struct {
+    uint8_t fin;
+    uint8_t opcode;
+    uint8_t mask;
+    uint64_t payload_len;
+    uint8_t masking_key[4];
+    char *payload_data;
+} ws_frame_t;
 
 const nmbs_t get_nmbs(void);
 ts_client_socket* get_clients_arr(void);
