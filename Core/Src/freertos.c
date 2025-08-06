@@ -223,6 +223,7 @@ static void websocket_thread(void *argument)
     int client_sock = -1;
     char frame[256];
     uint32_t last_button_update = 0;
+    _Bool is_button_rised = true;
 
     for (;;) {
     	ws_thread_profiler++;
@@ -269,25 +270,42 @@ static void websocket_thread(void *argument)
 			   client_sock = -1;
 			}
 
-            uint32_t now = osKernelGetTickCount();
-            if (client_sock >= 0 && now - last_button_update >= 100) // 100ms interval
-            {
-                last_button_update = now;
+			GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
 
-                GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
-                char json[64];
-                int len = snprintf(json, sizeof(json),
-					"{\"type\":\"button\",\"pressed\":%d}",
-                    (btn_state == GPIO_PIN_SET));
+			if(btn_state == GPIO_PIN_SET)
+			{
+				if(is_button_rised == true)
+				{
+					char json[64];
+					int len = snprintf(json, sizeof(json),"{\"type\":\"button\",\"pressed\":%d}",btn_state);
 
-                char ws_frame[128];
-                int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x1);
-                if (write(client_sock, ws_frame, frame_len) < 0)
-                {
-                	printf("WebSocket send error");
-                	client_sock = -1;
-                }
-            }
+					char ws_frame[128];
+					int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x1);
+					if (write(client_sock, ws_frame, frame_len) < 0)
+					{
+						printf("WebSocket send error");
+						client_sock = -1;
+					}
+					is_button_rised = false;
+				}
+			}
+			else
+			{
+				if(is_button_rised == false)
+				{
+					char json[64];
+					int len = snprintf(json, sizeof(json),"{\"type\":\"button\",\"pressed\":%d}",btn_state);
+
+					char ws_frame[128];
+					int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x1);
+					if (write(client_sock, ws_frame, frame_len) < 0)
+					{
+						printf("WebSocket send error");
+						client_sock = -1;
+					}
+					is_button_rised = true;
+				}
+			}
         }
         osDelay(10);
     }
