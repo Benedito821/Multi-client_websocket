@@ -52,7 +52,7 @@ osThreadId_t tcp_server_TaskHandle = NULL;
 
 const osThreadAttr_t tcp_server_Task_attributes = {
   .name = "tcp_server_thread",
-  .stack_size = 5*1024,
+  .stack_size = 4*1024,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
@@ -60,7 +60,7 @@ osThreadId_t httpServerTaskHandle = NULL;;
 
 const osThreadAttr_t httpServerTask_attributes = {
   .name = "httpServerTask",
-  .stack_size =  3*1024,
+  .stack_size =  5*1024, //ideal 3
   .priority = (osPriority_t) osPriorityNormal1,
 };
 
@@ -124,6 +124,7 @@ void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 
 void vApplicationMallocFailedHook(void)
 {
+	printf("Malloc failed(heap issue)\r\n");
 	__NOP();
 }
 
@@ -190,11 +191,11 @@ void StartDefaultTask(void *argument)
 
   osDelay(500); //let ITM stabilize
 
-//  tcp_server_TaskHandle = osThreadNew(tcp_server_thread, NULL, &tcp_server_Task_attributes);
-//  if(tcp_server_TaskHandle == NULL)
-//  {
-//	  Error_Handler();
-//  }
+  tcp_server_TaskHandle = osThreadNew(tcp_server_thread, NULL, &tcp_server_Task_attributes);
+  if(tcp_server_TaskHandle == NULL)
+  {
+	  Error_Handler();
+  }
   httpServerTaskHandle = osThreadNew(http_server_thread, NULL, &httpServerTask_attributes);
   if(httpServerTaskHandle == NULL)
   {
@@ -225,36 +226,31 @@ static void websocket_thread(void *argument)
 
     for (;;) {
     	ws_thread_profiler++;
-        // Wait for new WebSocket connection
         if (client_sock < 0)
         {
             osMessageQueueGet(ws_queue, &client_sock, NULL, osWaitForever);
             printf("New WebSocket client connected\r\n");
-            // Set socket to non-blocking
-			fcntl(client_sock, F_SETFL, O_NONBLOCK);
+            printf("Real free heap (websocket_thread): %lu\r\n", xPortGetFreeHeapSize());
+            printf("Stack free(websocket_thread): %lu\r\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
+			fcntl(client_sock, F_SETFL, O_NONBLOCK); // Set socket to non-blocking
         }
 
-        // Handle WebSocket communication
         if (client_sock >= 0)
         {
-            // 1. Check for incoming frames
             int bytes_read = recv(client_sock, frame, sizeof(frame), 0);
 
             if (bytes_read > 0)
             {
-            	printf("bytes_read = %d\r\n",bytes_read);
                 ws_frame_t ws_frame;
                 if (parse_ws_frame(frame, bytes_read, &ws_frame) > 0)
                 {
-                	printf("parse_ws_frame > 0\r\n");
                     if (ws_frame.opcode == 0x1)
-                    { // Text frame
-                    	printf("ws_frame.opcode = 0x1\r\n");
+                    {
                         printf("WS Message: %.*s\n", (int)ws_frame.payload_len, ws_frame.payload_data);
                     }
                     else if (ws_frame.opcode == 0x8)
-                    { // Close
-                    	printf("ws_frame.opcode = 0x8\r\n");
+                    {
+                    	printf("Connection closed by client\r\n");
                         close(client_sock);
                         client_sock = -1;
                     }
@@ -268,16 +264,14 @@ static void websocket_thread(void *argument)
             }
             else if (bytes_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
             {
-			   // Error occurred
 			   printf("WebSocket recv error\r\n");
 			   close(client_sock);
 			   client_sock = -1;
 			}
 
-            // 2. Send periodic button updates
             uint32_t now = osKernelGetTickCount();
-            if (client_sock >= 0 && now - last_button_update >= 100)
-            { // 100ms interval
+            if (client_sock >= 0 && now - last_button_update >= 100) // 100ms interval
+            {
                 last_button_update = now;
 
                 GPIO_PinState btn_state = HAL_GPIO_ReadPin(B1_USER_GPIO_Port, B1_USER_Pin);
@@ -288,15 +282,13 @@ static void websocket_thread(void *argument)
 
                 char ws_frame[128];
                 int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x1);
-                if (send(client_sock, ws_frame, frame_len, 0) < 0)
+                if (write(client_sock, ws_frame, frame_len) < 0)
                 {
                 	printf("WebSocket send error");
-//                    write(client_sock, ws_frame, frame_len);
                 	client_sock = -1;
                 }
             }
         }
-
         osDelay(10);
     }
 }
@@ -328,8 +320,9 @@ static void http_server_thread(void* argument)
             	http_thread_profiler++;
                 if( (http_client_sock = accept(http_sock, (struct sockaddr*)&http_client, &http_len)) >=0 )
                 {
-
-					int bytes_read = recvfrom(http_client_sock, request, sizeof(request), 0,(struct sockaddr*)&http_client, &http_len);
+                	printf("Real free heap (http_server_thread): %lu\r\n", xPortGetFreeHeapSize());
+                    printf("Stack free(http_server_thread): %lu\r\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
+                	int bytes_read = recvfrom(http_client_sock, request, sizeof(request), 0,(struct sockaddr*)&http_client, &http_len);
 
 					if(bytes_read > 0)
 					{
@@ -550,6 +543,8 @@ static void tcp_server_thread(void* argument)
 					int new_sock = accept(sock,(struct sockaddr*)&remotehost,(socklen_t*)&sockaddrsize);
 					if (new_sock > 0)
 					{
+		             	printf("Real free heap (tcp_server_thread): %lu\r\n", xPortGetFreeHeapSize());
+						printf("Stack free(tcp_server_thread): %lu\r\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
 						int slot = -1;
 						for (uint16_t idx = 0; idx < MAX_TCP_SOCK_CLIENTS; idx++)
 						{
@@ -642,9 +637,11 @@ void generate_ws_accept(const char *key, char *output)
 
 // Parse WebSocket frame
 int parse_ws_frame(const char *data, int len, ws_frame_t *frame) {
-    if (len < 2) return -1;
+    if (len < 2)
+    	return -1;
 
     const uint8_t *bytes = (const uint8_t *)data;
+
     frame->fin = (bytes[0] & 0x80) != 0;
     frame->opcode = bytes[0] & 0x0F;
     frame->mask = (bytes[1] & 0x80) != 0;
@@ -652,24 +649,32 @@ int parse_ws_frame(const char *data, int len, ws_frame_t *frame) {
 
     int offset = 2;
 
-    if (frame->payload_len == 126) {
-        if (len < offset + 2) return -1;
+    if (frame->payload_len == 126)
+    {
+        if (len < offset + 2)
+        	return -1;
         frame->payload_len = (bytes[2] << 8) | bytes[3];
         offset += 2;
-    } else if (frame->payload_len == 127) {
-        if (len < offset + 8) return -1;
+    }
+    else if (frame->payload_len == 127)
+    {
+        if (len < offset + 8)
+        	return -1;
         // For 64-bit length (we'll just use 32-bit for simplicity)
         frame->payload_len = (bytes[2] << 24) | (bytes[3] << 16) | (bytes[4] << 8) | bytes[5];
         offset += 8;
     }
 
-    if (frame->mask) {
-        if (len < offset + 4) return -1;
+    if (frame->mask)
+    {
+        if (len < offset + 4)
+        	return -1;
         memcpy(frame->masking_key, bytes + offset, 4);
         offset += 4;
     }
 
-    if (len < offset + frame->payload_len) return -1;
+    if (len < offset + frame->payload_len)
+    	return -1;
 
     frame->payload_data = (char *)(bytes + offset);
     return offset + frame->payload_len;
@@ -677,18 +682,24 @@ int parse_ws_frame(const char *data, int len, ws_frame_t *frame) {
 
 // Create WebSocket frame
 int create_ws_frame(char *buffer, int buflen, const char *payload, int payload_len, uint8_t opcode) {
-    if (buflen < payload_len + 10) return -1;
+    if (buflen < payload_len + 10)
+    	return -1;
 
     int offset = 0;
     buffer[offset++] = 0x80 | (opcode & 0x0F); // FIN + opcode
 
-    if (payload_len <= 125) {
+    if (payload_len <= 125)
+    {
         buffer[offset++] = payload_len;
-    } else if (payload_len <= 65535) {
+    }
+    else if (payload_len <= 65535)
+    {
         buffer[offset++] = 126;
         buffer[offset++] = (payload_len >> 8) & 0xFF;
         buffer[offset++] = payload_len & 0xFF;
-    } else {
+    }
+    else
+    {
         buffer[offset++] = 127;
         // For simplicity, we'll assume payload_len fits in 32 bits
         buffer[offset++] = 0;

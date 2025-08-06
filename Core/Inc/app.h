@@ -21,7 +21,6 @@ typedef struct client_socket
 	bool in_use;
 }ts_client_socket;
 
-// WebSocket frame parsing
 typedef struct {
     uint8_t fin;
     uint8_t opcode;
