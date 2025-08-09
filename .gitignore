@@ -58,3 +58,4 @@ dkms.conf
 **/Release/
 **/.settings/
 *.launch
+*.cfg

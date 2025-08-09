@@ -10,6 +10,10 @@
 #define MAX_TCP_SOCK_CLIENTS (MEMP_NUM_NETCONN-1) //Max possible sockets is MEMP_NUM_NETCONN-1
 #define HTTP_PORT 80
 #define WS_PORT HTTP_PORT
+#define HTTP_SERVER_STACK_SIZE 	   5*1024U
+#define WEBSOCKET_STACK_SIZE 	   2*1024U
+#define TCP_STACK_SIZE 	   		   4*1024U
+#define MAX_WS_CLIENTS			   2U
 
 typedef struct client_socket
 {
