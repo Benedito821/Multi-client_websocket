@@ -11,9 +11,11 @@
 #define HTTP_PORT 80
 #define WS_PORT HTTP_PORT
 #define HTTP_SERVER_STACK_SIZE 	   5*1024U
-#define WEBSOCKET_STACK_SIZE 	   2*1024U
+#define WEBSOCKET_STACK_SIZE 	   3*1024U
 #define TCP_STACK_SIZE 	   		   4*1024U
-#define MAX_WS_CLIENTS			   2U
+#define MAX_WS_CLIENTS			   4U
+#define MAX_HTTP_CLIENTS		   MAX_WS_CLIENTS
+//#define ENABLE_MODBUS_TCP
 
 typedef struct client_socket
 {

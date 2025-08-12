@@ -48,21 +48,23 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-osThreadId_t tcp_server_TaskHandle = NULL;
-
+#ifdef ENABLE_MODBUS_TCP
 const osThreadAttr_t tcp_server_Task_attributes = {
   .name = "tcp_server_thread",
   .stack_size = TCP_STACK_SIZE,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-osThreadId_t httpServerTaskHandle = NULL;;
+osThreadId_t tcp_server_TaskHandle = NULL;
+#endif
 
 const osThreadAttr_t httpServerTask_attributes = {
   .name = "httpServerTask",
-  .stack_size =  HTTP_SERVER_STACK_SIZE, //ideal 3*1024
+  .stack_size =  HTTP_SERVER_STACK_SIZE,
   .priority = (osPriority_t) osPriorityNormal1,
 };
+
+osThreadId_t httpServerTaskHandle = NULL;
 
 const osThreadAttr_t ws_thread_attr = {
     .name = "WebSocketThread",
@@ -70,24 +72,15 @@ const osThreadAttr_t ws_thread_attr = {
 	.priority = (osPriority_t) osPriorityNormal
 };
 
+osThreadId_t ws_thread_id = NULL;
+
+osMessageQueueId_t ws_queue;
+
 static ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
 static nmbs_t nmbs;
 
 static nmbs_server_t nmbs_server = {.id = 0x01,.coils = {0},.regs = {0},.input_regs = {0}};
-
-osMessageQueueId_t ws_queue;
-
-osThreadId_t ws_thread_id = NULL;
-//
-//StaticTask_t xHttpTaskBuffer;
-//StackType_t xHttpStack[HTTP_SERVER_STACK_SIZE] ;
-//
-//StaticTask_t xWsTaskBuffer;
-//StackType_t xWsStack[WEBSOCKET_STACK_SIZE] ;
-//
-//StaticTask_t xTcpTaskBuffer;
-//StackType_t xTcpStack[TCP_STACK_SIZE] ;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -96,7 +89,6 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
@@ -106,7 +98,6 @@ void generate_ws_accept(const char *key, char *output);
 int parse_ws_frame(const char *data, int len, ws_frame_t *frame);
 int create_ws_frame(char *buffer, int buflen, const char *payload, int payload_len, uint8_t opcode);
 void send_response(int sock, const char *content_type, const char *data, int len);
-void send_file(const char *path, const char *content_type) ;
 void broadcast_to_ws_clients(int* clients_sock,const char *message, int len);
 /* USER CODE END FunctionPrototypes */
 
@@ -123,9 +114,6 @@ void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 {
 	printf("Stack overflow in %s\r\n",pcTaskName);
 	__NOP();
-	/* Run time stack overflow checking is performed if
-   configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
-   called if a stack overflow is detected. */
 }
 
 void vApplicationMallocFailedHook(void)
@@ -196,42 +184,39 @@ void StartDefaultTask(void *argument)
   MX_LWIP_Init();
 
   osDelay(500); //let ITM stabilize
-
-//    httpServerTaskHandle = xTaskCreateStatic(http_server_thread, "HTTP", HTTP_SERVER_STACK_SIZE,
-//                     NULL, osPriorityNormal, xHttpStack, &xHttpTaskBuffer);
-//      if(httpServerTaskHandle == NULL)
-//      {
-//    	  Error_Handler();
-//      }
-//    ws_thread_id = xTaskCreateStatic(websocket_thread, "WS", WEBSOCKET_STACK_SIZE,
-//                     NULL, osPriorityNormal1, xWsStack, &xWsTaskBuffer);
-//      if(ws_thread_id == NULL)
-//      {
-//    	  Error_Handler();
-//      }
-//
-//    tcp_server_TaskHandle = xTaskCreateStatic(tcp_server_thread, "TCP", TCP_STACK_SIZE,
-//                     NULL, osPriorityNormal1, xTcpStack, &xTcpTaskBuffer);
-//      if(tcp_server_TaskHandle == NULL)
-//      {
-//    	  Error_Handler();
-//      }
+#ifdef ENABLE_MODBUS_TCP
   tcp_server_TaskHandle = osThreadNew(tcp_server_thread, NULL, &tcp_server_Task_attributes);
+
   if(tcp_server_TaskHandle == NULL)
   {
+	  printf("failed to create tcp_server_thread");
 	  Error_Handler();
   }
+#endif
+
   httpServerTaskHandle = osThreadNew(http_server_thread, NULL, &httpServerTask_attributes);
+
   if(httpServerTaskHandle == NULL)
   {
+	  printf("failed to create httpServerTask\r\n");
 	  Error_Handler();
   }
+
   ws_thread_id = osThreadNew(websocket_thread, NULL, &ws_thread_attr);
+
   if(ws_thread_id == NULL)
   {
+	  printf("failed to create WebSocketThread\r\n");
 	  Error_Handler();
   }
+
   ws_queue = osMessageQueueNew(4, sizeof(int), NULL);
+
+  if(ws_queue == NULL)
+  {
+	  printf("failed to create WebSocket queue\r\n");
+	  Error_Handler();
+  }
   /* Infinite loop */
   for(;;)
   {
@@ -259,8 +244,16 @@ static void websocket_thread(void *argument)
                 {
                 	clients_sock[i] = new_sock;
                     fcntl(new_sock, F_SETFL, O_NONBLOCK);
-                    printf("\x1B[4;34mNew WebSocket client connected (%d/%d)\x1B[0m\r\n",i+1, MAX_WS_CLIENTS);
-                    break;
+                    printf("New WebSocket client connected (%d/%d)\r\n",i+1, MAX_WS_CLIENTS);
+
+                    // Send initial state to new client
+				   GPIO_PinState led_state = HAL_GPIO_ReadPin(LD1_GPIO_Port, LD1_Pin);
+				   char init_msg[64];
+				   int len = snprintf(init_msg, sizeof(init_msg),
+					   "{\"type\":\"led\",\"state\":%d}",
+					   (led_state == GPIO_PIN_SET) ? 1 : 0);
+				   broadcast_to_ws_clients(&clients_sock[i], init_msg, len);
+				   break;
                 }
             }
         }
@@ -330,14 +323,8 @@ static void websocket_thread(void *argument)
 					char json[64];
 					int len = snprintf(json, sizeof(json),"{\"type\":\"button\",\"pressed\":%d}",btn_state);
 
-					char ws_frame[128];
-					int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x01);
-					if (write(clients_sock[i], ws_frame, frame_len) < 0)
-					{
-						printf("WebSocket send error");
-						close(clients_sock[i]);
-						clients_sock[i] = -1;
-					}
+					broadcast_to_ws_clients(clients_sock,json,len);
+
 					is_button_rised = false;
 				}
 			}
@@ -348,14 +335,8 @@ static void websocket_thread(void *argument)
 					char json[64];
 					int len = snprintf(json, sizeof(json),"{\"type\":\"button\",\"pressed\":%d}",btn_state);
 
-					char ws_frame[128];
-					int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), json, len, 0x01);
-					if (write(clients_sock[i], ws_frame, frame_len) < 0)
-					{
-						printf("WebSocket send error");
-						close(clients_sock[i]);
-						clients_sock[i] = -1;
-					}
+					broadcast_to_ws_clients(clients_sock,json,len);
+
 					is_button_rised = true;
 				}
 			}
@@ -366,95 +347,248 @@ static void websocket_thread(void *argument)
 
 static void http_server_thread(void* argument)
 {
-	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
-	int http_sock, http_client_sock;
-    struct sockaddr_in http_addr, http_client;
-    socklen_t http_len = sizeof(http_client);
-    struct fs_file file;
-    char request[512] = {0};
+    printf("Start %s\n\r", osThreadGetName(osThreadGetId()));
+    int http_sock, max_fd;
+    struct sockaddr_in http_addr;
+    fd_set read_fds, master_fds;
+    int client_sockets[FD_SETSIZE]; // Array to track client sockets
+    int i;
 
-    if( (http_sock = socket(AF_INET, SOCK_STREAM, 0)) >= 0)
+    for (i = 0; i < FD_SETSIZE; i++)
     {
+        client_sockets[i] = -1;
+    }
 
-        http_addr.sin_family = AF_INET;
-        http_addr.sin_addr.s_addr = INADDR_ANY;
-        http_addr.sin_port = htons(HTTP_PORT);
+    if ((http_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        printf("Socket creation fail in %s\r\n", osThreadGetName(osThreadGetId()));
+        osThreadTerminate(osThreadGetId());
+    }
 
-        if (bind(http_sock, (struct sockaddr*)&http_addr, sizeof(http_addr)) == 0)
+    http_addr.sin_family = AF_INET;
+    http_addr.sin_addr.s_addr = INADDR_ANY;
+    http_addr.sin_port = htons(HTTP_PORT);
+
+    if (bind(http_sock, (struct sockaddr*)&http_addr, sizeof(http_addr)) < 0)
+    {
+        printf("Bind error in %s\r\n", osThreadGetName(osThreadGetId()));
+        close(http_sock);
+        osThreadTerminate(osThreadGetId());
+    }
+
+    listen(http_sock, 16);
+    fcntl(http_sock, F_SETFL, O_NONBLOCK);
+
+    FD_ZERO(&master_fds);
+    FD_SET(http_sock, &master_fds);
+    max_fd = http_sock;
+
+    for (;;)
+    {
+        // Copy the master set to working set
+        read_fds = master_fds;
+
+        // Wait for activity on any socket
+        if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0)
         {
-            listen(http_sock, 16);
+            printf("select error\n");
+            continue;
+        }
 
-            fcntl(http_sock, F_SETFL, O_NONBLOCK);
-
-            for(;;)
+        // Check all sockets for activity
+        for (i = 0; i <= max_fd; i++)
+        {
+            if (FD_ISSET(i, &read_fds))
             {
-                if( (http_client_sock = accept(http_sock, (struct sockaddr*)&http_client, &http_len)) >=0 )
+                // New connection on server socket
+                if (i == http_sock)
                 {
-                	printf("Real free heap (http_server_thread): %lu\r\n",(uint32_t)xPortGetFreeHeapSize());
-                    printf("Stack free(http_server_thread): %lu\r\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
-                	int bytes_read = recvfrom(http_client_sock, request, sizeof(request), 0,(struct sockaddr*)&http_client, &http_len);
+                    struct sockaddr_in http_client;
+                    socklen_t http_len = sizeof(http_client);
+                    int new_client = accept(http_sock, (struct sockaddr*)&http_client, &http_len);
 
-					if(bytes_read > 0)
-					{
-						request[bytes_read] = '\0';
+                    if (new_client >= 0)
+                    {
+                        printf("New connection accepted %d\r\n",new_client);
+                        fcntl(new_client, F_SETFL, O_NONBLOCK);
 
-						int send_file(const char *path, const char *content_type)
+                        int j;
+                        for (j = 0; j < FD_SETSIZE; j++)
+                        {
+                            if (client_sockets[j] < 0)
+                            {
+                                client_sockets[j] = new_client;
+                                break;
+                            }
+                        }
+
+                        if (j == FD_SETSIZE)
+                        {
+                            printf("Too many connections. Closing %d...\r\n",new_client);
+                            close(new_client);
+                        }
+                        else
+                        {
+                            FD_SET(new_client, &master_fds);
+                            if (new_client > max_fd)
+                            {
+                                max_fd = new_client;
+                            }
+                        }
+                    }
+                    else
+                    {
+						if (errno == EWOULDBLOCK || errno == EAGAIN)
 						{
-							printf("%s requested\n", path);
-							if(fs_open(&file, path) == 0)
-							{
-								char headers[256];
-								int len = snprintf(headers, sizeof(headers),
-									"HTTP/1.1 200 OK\r\n"
-									"Content-Type: %s\r\n"
-									"Content-Length: %d\r\n"
-									"Connection: close\r\n\r\n",
-									content_type, file.len);
-								write(http_client_sock, headers, len);
-								write(http_client_sock, file.data, file.len);
-								fs_close(&file);
-								return 0;
-							}
-							else
-								return -1;
+							osDelay(10);
+							continue;
 						}
+						printf("%d accept error in %s\r\n",new_client,osThreadGetName(osThreadGetId()));
+                    }
+                }
+                else
+                {
+                    struct fs_file file;
+                    char request[512] = {0};
+                    int bytes_read = recv(i, request, sizeof(request), 0);
+
+                    if (bytes_read > 0)
+                    {
+                        request[bytes_read] = '\0';
+
+                        int send_file(int sock, const char *path, const char *content_type)
+                        {
+                            printf("%s requested by client %d\r\n", path,sock);
+                            if(fs_open(&file, path) == 0)
+                            {
+                                char headers[256];
+                                int len = snprintf(headers, sizeof(headers),
+                                    "HTTP/1.1 200 OK\r\n"
+                                    "Content-Type: %s\r\n"
+                                    "Content-Length: %d\r\n"
+                                    "Connection: close\r\n\r\n",
+                                    content_type, file.len);
+
+                                int sent = write(sock, headers, len);
+                                if (sent != len)
+                                {
+                                    printf("Failed to send complete headers to client %d\r\n",sock);
+                                    fs_close(&file);
+                                    return -1;
+                                }
+
+                                size_t total_sent = 0;
+                                while (total_sent < file.len)
+                                {
+                                    sent = write(sock, file.data + total_sent, file.len - total_sent);
+                                    if (sent <= 0)
+                                    {
+                                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                                        {
+                                            osDelay(1);
+                                            continue;
+                                        }
+                                        printf("Failed to send file data to client %d\r\n",sock);
+                                        fs_close(&file);
+                                        return -1;
+                                    }
+                                    total_sent += sent;
+                                }
+
+                                fs_close(&file);
+                                printf("%s sent completely (%d bytes) to client %d\n", path, total_sent,sock);
+                                return 0;
+                            }
+                            else
+                            {
+                                printf("fail to open %s\r\n", path);
+                                return -1;
+                            }
+                        }
 
 						int file_send_err = 0;
+						if (strstr(request, "Upgrade: websocket") && strstr(request, "GET /ws"))
+						{
+							char *key_start = strstr(request, "Sec-WebSocket-Key: ");
+							if (key_start)
+							{
+								char ws_key[64], accept_key[64];
+								key_start += strlen("Sec-WebSocket-Key: ");
+								char *key_end = strstr(key_start, "\r\n");
+								if (key_end) {
+									int key_len = key_end - key_start;
+									strncpy(ws_key, key_start, key_len);
+									ws_key[key_len] = '\0';
 
+									generate_ws_accept(ws_key, accept_key);
+
+									char response[256];
+									int len = snprintf(response, sizeof(response),
+										"HTTP/1.1 101 Switching Protocols\r\n"
+										"Upgrade: websocket\r\n"
+										"Connection: Upgrade\r\n"
+										"Sec-WebSocket-Accept: %s\r\n\r\n",
+										accept_key);
+									write(i, response, len);
+
+									if (osMessageQueuePut(ws_queue, &i, 0, 100) != osOK)
+									{
+										printf("WebSocket client queue full, rejecting connection\n");
+				                        close(i);
+				                        FD_CLR(i, &master_fds);
+
+				                        // Remove from client sockets array
+				                        for (int j = 0; j < FD_SETSIZE; j++)
+				                        {
+				                            if (client_sockets[j] == i)
+				                            {
+				                                client_sockets[j] = -1;
+				                                break;
+				                            }
+				                        }
+									}
+									continue;
+								}
+							}
+						}
 						if(strstr(request, "GET /spacerockets.html") || strstr(request, "GET / "))
 						{
-							file_send_err = send_file("/spacerockets.html", "text/html");
+							file_send_err = send_file(i,"/spacerockets.html", "text/html");
 						}
 						else if(strstr(request, "GET /control.html"))
 						{
-							file_send_err = send_file("/control.html", "text/html");
+							file_send_err = send_file(i,"/control.html", "text/html");
 						}
 						else if(strstr(request, "GET /control.js"))
 						{
-							file_send_err = send_file("/control.js", "application/javascript");
+							file_send_err = send_file(i,"/control.js", "application/javascript");
 						}
 						else if(strstr(request, "GET /styles.css"))
 						{
-							file_send_err = send_file("/styles.css", "text/css");
+							file_send_err = send_file(i,"/styles.css", "text/css");
+						}
+						else if(strstr(request, "GET /favicon.ico"))
+						{
+							file_send_err = send_file(i,"/favicon.ico", "image/x-icon");
 						}
 						else if (strstr(request, "GET /led-state"))
 						{
-						    GPIO_PinState led_state = HAL_GPIO_ReadPin(LD1_GPIO_Port, LD1_Pin);
+							GPIO_PinState led_state = HAL_GPIO_ReadPin(LD1_GPIO_Port, LD1_Pin);
 
-						    char json[32];
-						    int len = snprintf(json, sizeof(json), "{\"state\":%d}",
-						                      (led_state == GPIO_PIN_SET) ? 1 : 0);
+							char json[32];
+							int len = snprintf(json, sizeof(json), "{\"state\":%d}",
+											  (led_state == GPIO_PIN_SET) ? 1 : 0);
 
-						    char response[128];
-						    snprintf(response, sizeof(response),
-						        "HTTP/1.1 200 OK\r\n"
-						        "Content-Type: application/json\r\n"
-						        "Content-Length: %d\r\n"
-						        "Connection: close\r\n\r\n"
-						        "%s",
-						        len, json);
+							char response[128];
+							snprintf(response, sizeof(response),
+								"HTTP/1.1 200 OK\r\n"
+								"Content-Type: application/json\r\n"
+								"Content-Length: %d\r\n"
+								"Connection: close\r\n\r\n"
+								"%s",
+								len, json);
 
-						    write(http_client_sock, response, strlen(response));
+							write(i, response, strlen(response));
 						}
 						else if(strstr(request, "GET /img/"))
 						{
@@ -473,59 +607,29 @@ static void http_server_thread(void* argument)
 								{
 									content_type = "image/png";
 								}
-								else if(strstr(path, ".ico"))
-								{
-									content_type = "image/x-icon";
-								}
 
-								file_send_err = send_file(path, content_type);
+								file_send_err = send_file(i,path, content_type);
 							}
 							else
 								file_send_err = -2;
 						}
-						if (strstr(request, "Upgrade: websocket") && strstr(request, "GET /ws"))
-						{
-						    char *key_start = strstr(request, "Sec-WebSocket-Key: ");
-						    if (key_start) {
-						        char ws_key[64], accept_key[64];
-						        key_start += strlen("Sec-WebSocket-Key: ");
-						        char *key_end = strstr(key_start, "\r\n");
-						        if (key_end) {
-						            int key_len = key_end - key_start;
-						            strncpy(ws_key, key_start, key_len);
-						            ws_key[key_len] = '\0';
-
-						            generate_ws_accept(ws_key, accept_key);
-
-						            char response[256];
-						            int len = snprintf(response, sizeof(response),
-						                "HTTP/1.1 101 Switching Protocols\r\n"
-						                "Upgrade: websocket\r\n"
-						                "Connection: Upgrade\r\n"
-						                "Sec-WebSocket-Accept: %s\r\n\r\n",
-						                accept_key);
-						            write(http_client_sock, response, len);
-
-						            if (osMessageQueuePut(ws_queue, &http_client_sock, 0, 100) != osOK)
-						            {
-						                printf("WebSocket client queue full, rejecting connection\n");
-						                close(http_client_sock);
-						            }
-						            continue;  // Skip (normal HTTP processing)
-						        }
-						    }
-						}
 						else if (strstr(request, "POST /led"))
 						{
-						    HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin,(strstr(request, "\"state\":1") ? GPIO_PIN_SET : GPIO_PIN_RESET));
+							HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin,(strstr(request, "\"state\":1") ? GPIO_PIN_SET : GPIO_PIN_RESET));
+
+						    // Send success response
+						    const char *response = "HTTP/1.1 200 OK\r\n"
+						                          "Content-Type: application/json\r\n"
+						                          "Content-Length: 0\r\n"
+						                          "Connection: close\r\n\r\n";
+						    write(i, response, strlen(response));
 
 							osThreadFlagsSet(ws_thread_id, 0x01);
 
-						///osDelay(100);
 						}
 						else
 						{
-							file_send_err = send_file("/404.html", "text/html");
+							file_send_err = send_file(i,"/404.html", "text/html");
 						}
 
 						if(file_send_err != 0)
@@ -535,43 +639,52 @@ static void http_server_thread(void* argument)
 							else if(file_send_err == -2)
 								printf("Fatal: wrong path\r\n");
 							const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
-							write(http_client_sock, resp, strlen(resp));
+							write(i, resp, strlen(resp));
 						}
-					}
+                        // After handling the request, close the connection (HTTP 1.0 style)
+                        close(i);
+                        FD_CLR(i, &master_fds);
 
-					close(http_client_sock);
-
-        			printf("socket closed in %s\r\n",osThreadGetName(osThreadGetId()));
-                }
-                else
-                {
-                    if (errno == EWOULDBLOCK || errno == EAGAIN)
-                    {
-                        osDelay(10);
-                        continue;
+                        // Remove from client sockets array
+                        for (int j = 0; j < FD_SETSIZE; j++)
+                        {
+                            if (client_sockets[j] == i)
+                            {
+                                client_sockets[j] = -1;
+                                break;
+                            }
+                        }
                     }
-        			printf("accept error in %s\r\n",osThreadGetName(osThreadGetId()));
+                    else if (bytes_read == 0)
+                    {
+                        // Connection closed by client
+                        close(i);
+                        FD_CLR(i, &master_fds);
+
+                        for (int j = 0; j < FD_SETSIZE; j++)
+                        {
+                            if (client_sockets[j] == i)
+                            {
+                                client_sockets[j] = -1;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
-		}
-		else
-		{
-			printf("Bind error in %s\r\n",osThreadGetName(osThreadGetId()));
-			close(http_sock);
-		}
-    }
-    else
-    {
-    	printf("Socket creation fail in %s\r\n",osThreadGetName(osThreadGetId()));
-    	osThreadTerminate(osThreadGetId());
+        }
+
+        //Prevent CPU hogging
+        osDelay(1);
     }
 }
 
-
+#ifdef ENABLE_MODBUS_TCP
 static void tcp_server_thread(void* argument)
 {
 	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
-
+	printf("Real free heap (tcp_server_thread): %lu\r\n",(uint32_t)xPortGetFreeHeapSize());
+	printf("Stack free(tcp_server_thread): %lu\r\n",(uint32_t)uxTaskGetStackHighWaterMark(NULL));
 	uint16_t port = MODBUS_TCP_PORT;
 	int sock;
 	struct sockaddr_in address,remotehost;
@@ -693,6 +806,7 @@ static void tcp_server_thread(void* argument)
 		osThreadTerminate(osThreadGetId());
 	}
 }
+#endif
 
 const nmbs_t get_nmbs(void)
 {
@@ -713,7 +827,6 @@ void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_
 	memcpy(&(dest->sin_zero),src->sin_zero,SIN_ZERO_LEN);
 }
 
-// Generate WebSocket accept key
 void generate_ws_accept(const char *key, char *output)
 {
     char combined[64];
@@ -727,8 +840,9 @@ void generate_ws_accept(const char *key, char *output)
     mbedtls_base64_encode((unsigned char *)output, 64, NULL, sha1, 20);
 }
 
-// Parse WebSocket frame
-int parse_ws_frame(const char *data, int len, ws_frame_t *frame) {
+
+int parse_ws_frame(const char *data, int len, ws_frame_t *frame)
+{
     if (len < 2)
     	return -1;
 
@@ -772,8 +886,9 @@ int parse_ws_frame(const char *data, int len, ws_frame_t *frame) {
     return offset + frame->payload_len;
 }
 
-// Create WebSocket frame
-int create_ws_frame(char *buffer, int buflen, const char *payload, int payload_len, uint8_t opcode) {
+
+int create_ws_frame(char *buffer, int buflen, const char *payload, int payload_len, uint8_t opcode)
+{
     if (buflen < payload_len + 10)
     	return -1;
 
@@ -808,16 +923,21 @@ int create_ws_frame(char *buffer, int buflen, const char *payload, int payload_l
     return offset + payload_len;
 }
 
-void broadcast_to_ws_clients(int* clients_sock,const char *message, int len)
+void broadcast_to_ws_clients(int* clients, const char *message, int len)
 {
     char ws_frame[128];
-    int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), message, len, 0x1);
+    int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), message, len, 0x01);
 
     for (int i = 0; i < MAX_WS_CLIENTS; i++)
     {
-        if (clients_sock[i] >= 0)
+        if (clients[i] >= 0)
         {
-            write(clients_sock[i], ws_frame, frame_len);
+            if (write(clients[i], ws_frame, frame_len) < 0)
+            {
+                printf("Failed to send to client %d, closing\n", i);
+                close(clients[i]);
+                clients[i] = -1;
+            }
         }
     }
 }
@@ -839,4 +959,3 @@ void send_response(int sock, const char *content_type, const char *data, int len
     write(sock, data, len);
 }
 /* USER CODE END Application */
-
