@@ -229,7 +229,7 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 static void websocket_thread(void *argument)
 {
-	printf("Start websocket_thread\n\r");
+	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
     char frame[256];    int clients_sock[MAX_WS_CLIENTS] = {[0 ... (MAX_WS_CLIENTS-1)] =  -1};
     _Bool is_button_rised = true;
 
@@ -238,13 +238,13 @@ static void websocket_thread(void *argument)
         int new_sock = -1;
         if (osMessageQueueGet(ws_queue, &new_sock, NULL, 0) == osOK)
         {
-            for (int i = 0; i < MAX_WS_CLIENTS; i++)
+            for (int idx = 0; idx < MAX_WS_CLIENTS; idx++)
             {
-                if (clients_sock[i] < 0)
+                if (clients_sock[idx] < 0)
                 {
-                	clients_sock[i] = new_sock;
+                	clients_sock[idx] = new_sock;
                     fcntl(new_sock, F_SETFL, O_NONBLOCK);
-                    printf("New WebSocket client connected (%d/%d)\r\n",i+1, MAX_WS_CLIENTS);
+                    printf("%s: New WebSocket client connected (%d/%d)\r\n",__func__,idx+1, MAX_WS_CLIENTS);
 
                     // Send initial state to new client
 				   GPIO_PinState led_state = HAL_GPIO_ReadPin(LD1_GPIO_Port, LD1_Pin);
@@ -252,8 +252,17 @@ static void websocket_thread(void *argument)
 				   int len = snprintf(init_msg, sizeof(init_msg),
 					   "{\"type\":\"led\",\"state\":%d}",
 					   (led_state == GPIO_PIN_SET) ? 1 : 0);
-				   broadcast_to_ws_clients(&clients_sock[i], init_msg, len);
+				   broadcast_to_ws_clients(&clients_sock[idx], init_msg, len);
 				   break;
+                }
+                else if(idx >= MAX_WS_CLIENTS - 1 && clients_sock[idx] >= 0)
+                {
+                    printf("%s: WebSocket client limit reached (%d), rejecting connection...\r\n",__func__, MAX_WS_CLIENTS);
+                    const char *resp = "HTTP/1.1 503 Service Unavailable\r\n"
+                                    "Connection: close\r\n\r\n"
+                                    "Server busy - try again later";
+                    write(new_sock, resp, strlen(resp));
+                    close(new_sock);
                 }
             }
         }
@@ -269,17 +278,17 @@ static void websocket_thread(void *argument)
 				"{\"type\":\"led\",\"state\":%d}",
 				(new_led_state == GPIO_PIN_SET) ? 1 : 0);
 
-			printf("Broadcasting led state to all clients...\r\n");
+			printf("%s: Broadcasting led state to all clients...\r\n",__func__);
 
 			broadcast_to_ws_clients(clients_sock,led_update,len);
         }
 
-        for (int i = 0; i < MAX_WS_CLIENTS; i++)
+        for (int idx = 0; idx < MAX_WS_CLIENTS; idx++)
         {
-            if (clients_sock[i] < 0)
+            if (clients_sock[idx] < 0)
             	continue;
 
-            int bytes_read = recv(clients_sock[i], frame, sizeof(frame), 0);
+            int bytes_read = recv(clients_sock[idx], frame, sizeof(frame), 0);
 
             if (bytes_read > 0)
             {
@@ -288,29 +297,29 @@ static void websocket_thread(void *argument)
                 {
                     if (ws_frame.opcode == 0x1)
                     {
-                        printf("Client %d: %.*s\n", i,(int)ws_frame.payload_len, ws_frame.payload_data);
+                        printf("%s: Client %d: %.*s\n",__func__, idx,(int)ws_frame.payload_len, ws_frame.payload_data);
                     }
                     else if (ws_frame.opcode == 0x8)
                     {
-                        printf("Client %d disconnected\n", i);
-                        close(clients_sock[i]);
-                        clients_sock[i] = -1;
+                        printf("%s: Client %d disconnected\n",__func__, idx);
+                        close(clients_sock[idx]);
+                        clients_sock[idx] = -1;
                         continue;
                     }
                 }
             }
             else if (bytes_read == 0)
             {
-                printf("Client %d disconnected\n", i);
-                close(clients_sock[i]);
-                clients_sock[i] = -1;
+                printf("%s: Client %d disconnected\n",__func__, idx);
+                close(clients_sock[idx]);
+                clients_sock[idx] = -1;
                 continue;
             }
             else if (bytes_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
             {
-                printf("Client %d error, disconnecting\n", i);
-                close(clients_sock[i]);
-                clients_sock[i] = -1;
+                printf("%s: Client %d error, disconnecting\n",__func__, idx);
+                close(clients_sock[idx]);
+                clients_sock[idx] = -1;
                 continue;
             }
 
@@ -351,17 +360,17 @@ static void http_server_thread(void* argument)
     int http_sock, max_fd;
     struct sockaddr_in http_addr;
     fd_set read_fds, master_fds;
-    int client_sockets[FD_SETSIZE]; // Array to track client sockets
-    int i;
+    int client_sockets[MAX_HTTP_CLIENTS]; // Array to track client sockets
+    int idx;
 
-    for (i = 0; i < FD_SETSIZE; i++)
+    for (idx = 0; idx < MAX_HTTP_CLIENTS; idx++)
     {
-        client_sockets[i] = -1;
+        client_sockets[idx] = -1;
     }
 
     if ((http_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        printf("Socket creation fail in %s\r\n", osThreadGetName(osThreadGetId()));
+        printf("%s: Socket creation fail\r\n", __func__);
         osThreadTerminate(osThreadGetId());
     }
 
@@ -371,7 +380,7 @@ static void http_server_thread(void* argument)
 
     if (bind(http_sock, (struct sockaddr*)&http_addr, sizeof(http_addr)) < 0)
     {
-        printf("Bind error in %s\r\n", osThreadGetName(osThreadGetId()));
+        printf("%s: Bind error\r\n", __func__);
         close(http_sock);
         osThreadTerminate(osThreadGetId());
     }
@@ -391,17 +400,17 @@ static void http_server_thread(void* argument)
         // Wait for activity on any socket
         if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0)
         {
-            printf("select error\n");
+            printf("%s: select error\r\n",__func__);
             continue;
         }
 
         // Check all sockets for activity
-        for (i = 0; i <= max_fd; i++)
+        for (idx = 0; idx <= max_fd; idx++)
         {
-            if (FD_ISSET(i, &read_fds))
+            if (FD_ISSET(idx, &read_fds))
             {
                 // New connection on server socket
-                if (i == http_sock)
+                if (idx == http_sock)
                 {
                     struct sockaddr_in http_client;
                     socklen_t http_len = sizeof(http_client);
@@ -409,11 +418,15 @@ static void http_server_thread(void* argument)
 
                     if (new_client >= 0)
                     {
-                        printf("New connection accepted %d\r\n",new_client);
+                        printf("%s: New connection accepted %d\r\n",__func__,new_client);
+
+                        struct timeval timeout = { .tv_sec = 10, .tv_usec = 0 }; //connection timeout for this socket
+                        setsockopt(new_client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
                         fcntl(new_client, F_SETFL, O_NONBLOCK);
 
                         int j;
-                        for (j = 0; j < FD_SETSIZE; j++)
+                        for (j = 0; j < MAX_HTTP_CLIENTS-1; j++)
                         {
                             if (client_sockets[j] < 0)
                             {
@@ -422,9 +435,15 @@ static void http_server_thread(void* argument)
                             }
                         }
 
-                        if (j == FD_SETSIZE)
+                        printf("%s: j = %d\r\n",__func__,j);
+
+                        if (j > (MAX_HTTP_CLIENTS-1) )
                         {
-                            printf("Too many connections. Closing %d...\r\n",new_client);
+                            printf("%s: Too many connections. Closing %d...\r\n",__func__,new_client);
+                            const char *resp = "HTTP/1.1 503 Service Unavailable\r\n"
+                                            "Connection: close\r\n\r\n"
+                                            "Server busy - try again later";
+                            write(new_client, resp, strlen(resp));
                             close(new_client);
                         }
                         else
@@ -443,14 +462,14 @@ static void http_server_thread(void* argument)
 							osDelay(10);
 							continue;
 						}
-						printf("%d accept error in %s\r\n",new_client,osThreadGetName(osThreadGetId()));
+						printf("%s: %d accept error\r\n",__func__,new_client);
                     }
                 }
                 else
                 {
                     struct fs_file file;
                     char request[512] = {0};
-                    int bytes_read = recv(i, request, sizeof(request), 0);
+                    int bytes_read = recv(idx, request, sizeof(request), 0);
 
                     if (bytes_read > 0)
                     {
@@ -458,7 +477,7 @@ static void http_server_thread(void* argument)
 
                         int send_file(int sock, const char *path, const char *content_type)
                         {
-                            printf("%s requested by client %d\r\n", path,sock);
+                            printf("%s: %s requested by client %d\r\n",osThreadGetName(osThreadGetId()), path,sock);
                             if(fs_open(&file, path) == 0)
                             {
                                 char headers[256];
@@ -472,7 +491,7 @@ static void http_server_thread(void* argument)
                                 int sent = write(sock, headers, len);
                                 if (sent != len)
                                 {
-                                    printf("Failed to send complete headers to client %d\r\n",sock);
+                                    printf("%s: Failed to send complete headers to client %d\r\n",osThreadGetName(osThreadGetId()),sock);
                                     fs_close(&file);
                                     return -1;
                                 }
@@ -488,7 +507,7 @@ static void http_server_thread(void* argument)
                                             osDelay(1);
                                             continue;
                                         }
-                                        printf("Failed to send file data to client %d\r\n",sock);
+                                        printf("%s: Failed to send file data to client %d\r\n",osThreadGetName(osThreadGetId()),sock);
                                         fs_close(&file);
                                         return -1;
                                     }
@@ -496,12 +515,12 @@ static void http_server_thread(void* argument)
                                 }
 
                                 fs_close(&file);
-                                printf("%s sent completely (%d bytes) to client %d\n", path, total_sent,sock);
+                                printf("%s: %s sent completely (%d bytes) to client %d\n",osThreadGetName(osThreadGetId()), path, total_sent,sock);
                                 return 0;
                             }
                             else
                             {
-                                printf("fail to open %s\r\n", path);
+                                printf("%s: fail to open %s\r\n",osThreadGetName(osThreadGetId()), path);
                                 return -1;
                             }
                         }
@@ -529,18 +548,18 @@ static void http_server_thread(void* argument)
 										"Connection: Upgrade\r\n"
 										"Sec-WebSocket-Accept: %s\r\n\r\n",
 										accept_key);
-									write(i, response, len);
+									write(idx, response, len);
 
-									if (osMessageQueuePut(ws_queue, &i, 0, 100) != osOK)
+									if (osMessageQueuePut(ws_queue, &idx, 0, 100) != osOK)
 									{
-										printf("WebSocket client queue full, rejecting connection\n");
-				                        close(i);
-				                        FD_CLR(i, &master_fds);
+										printf("%s: WebSocket client queue full, rejecting connection\r\n",__func__);
+				                        close(idx);
+				                        FD_CLR(idx, &master_fds);
 
 				                        // Remove from client sockets array
-				                        for (int j = 0; j < FD_SETSIZE; j++)
+				                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
 				                        {
-				                            if (client_sockets[j] == i)
+				                            if (client_sockets[j] == idx)
 				                            {
 				                                client_sockets[j] = -1;
 				                                break;
@@ -553,23 +572,23 @@ static void http_server_thread(void* argument)
 						}
 						if(strstr(request, "GET /spacerockets.html") || strstr(request, "GET / "))
 						{
-							file_send_err = send_file(i,"/spacerockets.html", "text/html");
+							file_send_err = send_file(idx,"/spacerockets.html", "text/html");
 						}
 						else if(strstr(request, "GET /control.html"))
 						{
-							file_send_err = send_file(i,"/control.html", "text/html");
+							file_send_err = send_file(idx,"/control.html", "text/html");
 						}
 						else if(strstr(request, "GET /control.js"))
 						{
-							file_send_err = send_file(i,"/control.js", "application/javascript");
+							file_send_err = send_file(idx,"/control.js", "application/javascript");
 						}
 						else if(strstr(request, "GET /styles.css"))
 						{
-							file_send_err = send_file(i,"/styles.css", "text/css");
+							file_send_err = send_file(idx,"/styles.css", "text/css");
 						}
 						else if(strstr(request, "GET /favicon.ico"))
 						{
-							file_send_err = send_file(i,"/favicon.ico", "image/x-icon");
+							file_send_err = send_file(idx,"/favicon.ico", "image/x-icon");
 						}
 						else if (strstr(request, "GET /led-state"))
 						{
@@ -588,7 +607,7 @@ static void http_server_thread(void* argument)
 								"%s",
 								len, json);
 
-							write(i, response, strlen(response));
+							write(idx, response, strlen(response));
 						}
 						else if(strstr(request, "GET /img/"))
 						{
@@ -608,7 +627,7 @@ static void http_server_thread(void* argument)
 									content_type = "image/png";
 								}
 
-								file_send_err = send_file(i,path, content_type);
+								file_send_err = send_file(idx,path, content_type);
 							}
 							else
 								file_send_err = -2;
@@ -622,33 +641,33 @@ static void http_server_thread(void* argument)
 						                          "Content-Type: application/json\r\n"
 						                          "Content-Length: 0\r\n"
 						                          "Connection: close\r\n\r\n";
-						    write(i, response, strlen(response));
+						    write(idx, response, strlen(response));
 
 							osThreadFlagsSet(ws_thread_id, 0x01);
 
 						}
 						else
 						{
-							file_send_err = send_file(i,"/404.html", "text/html");
+							file_send_err = send_file(idx,"/404.html", "text/html");
 						}
 
 						if(file_send_err != 0)
 						{
 							if(file_send_err == -1)
-								printf("Fatal: could not open the file\r\n");
+								printf("%s: Fatal: could not open the file\r\n",__func__);
 							else if(file_send_err == -2)
-								printf("Fatal: wrong path\r\n");
+								printf("%s: Fatal: wrong path\r\n",__func__);
 							const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
-							write(i, resp, strlen(resp));
+							write(idx, resp, strlen(resp));
 						}
                         // After handling the request, close the connection (HTTP 1.0 style)
-                        close(i);
-                        FD_CLR(i, &master_fds);
+                        close(idx);
+                        FD_CLR(idx, &master_fds);
 
                         // Remove from client sockets array
-                        for (int j = 0; j < FD_SETSIZE; j++)
+                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
                         {
-                            if (client_sockets[j] == i)
+                            if (client_sockets[j] == idx)
                             {
                                 client_sockets[j] = -1;
                                 break;
@@ -658,12 +677,12 @@ static void http_server_thread(void* argument)
                     else if (bytes_read == 0)
                     {
                         // Connection closed by client
-                        close(i);
-                        FD_CLR(i, &master_fds);
+                        close(idx);
+                        FD_CLR(idx, &master_fds);
 
-                        for (int j = 0; j < FD_SETSIZE; j++)
+                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
                         {
-                            if (client_sockets[j] == i)
+                            if (client_sockets[j] == idx)
                             {
                                 client_sockets[j] = -1;
                                 break;
@@ -928,15 +947,15 @@ void broadcast_to_ws_clients(int* clients, const char *message, int len)
     char ws_frame[128];
     int frame_len = create_ws_frame(ws_frame, sizeof(ws_frame), message, len, 0x01);
 
-    for (int i = 0; i < MAX_WS_CLIENTS; i++)
+    for (int idx = 0; idx < MAX_WS_CLIENTS; idx++)
     {
-        if (clients[i] >= 0)
+        if (clients[idx] >= 0)
         {
-            if (write(clients[i], ws_frame, frame_len) < 0)
+            if (write(clients[idx], ws_frame, frame_len) < 0)
             {
-                printf("Failed to send to client %d, closing\n", i);
-                close(clients[i]);
-                clients[i] = -1;
+                printf("Failed to send to client %d, closing\n", idx);
+                close(clients[idx]);
+                clients[idx] = -1;
             }
         }
     }
