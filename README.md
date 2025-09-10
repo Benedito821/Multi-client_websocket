@@ -1,5 +1,5 @@
 # PROJECT OVERVIEW
-The project implements a server that responds to modbus TCP requests from different TCP clients simultaneouslly, while also serving web pages to interact with it(using AJAX). The final purpose is to display sensors measurements and states dinamically and visually on the web page, and additionally sending them over to TCP clients for real time monitoring.
+The project implements a server that responds to modbus TCP requests from different TCP clients simultaneouslly, while also serving web pages to interact with it(using AJAX/WebSocket). The purpose is to visually display button and LED state on the web page in real time, and additionally sending modbus payloads over to TCP clients (for real time monitoring of possibly existing sensors).
  
 
 # MODBUS TCP with STM32F746
