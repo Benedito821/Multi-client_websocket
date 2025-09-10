@@ -257,12 +257,14 @@ static void websocket_thread(void *argument)
                 }
                 else if(idx >= MAX_WS_CLIENTS - 1 && clients_sock[idx] >= 0)
                 {
-                    printf("%s: WebSocket client limit reached (%d), rejecting connection...\r\n",__func__, MAX_WS_CLIENTS);
+                    printf("%s: WebSocket client limit reached (%d), rejecting connection %d...\r\n",__func__, MAX_WS_CLIENTS,new_sock);
                     const char *resp = "HTTP/1.1 503 Service Unavailable\r\n"
                                     "Connection: close\r\n\r\n"
                                     "Server busy - try again later";
                     write(new_sock, resp, strlen(resp));
+                    osDelay(10);
                     close(new_sock);
+                    break;
                 }
             }
         }
@@ -354,6 +356,7 @@ static void websocket_thread(void *argument)
     }
 }
 
+
 static void http_server_thread(void* argument)
 {
     printf("Start %s\n\r", osThreadGetName(osThreadGetId()));
@@ -425,34 +428,34 @@ static void http_server_thread(void* argument)
 
                         fcntl(new_client, F_SETFL, O_NONBLOCK);
 
-                        int j;
-                        for (j = 0; j < MAX_HTTP_CLIENTS-1; j++)
+                        int cnt;
+                        for (cnt = 0; cnt < MAX_HTTP_CLIENTS; cnt++)
                         {
-                            if (client_sockets[j] < 0)
+                            if (client_sockets[cnt] < 0)
                             {
-                                client_sockets[j] = new_client;
+                                client_sockets[cnt] = new_client;
                                 break;
                             }
                         }
 
-                        printf("%s: j = %d\r\n",__func__,j);
-
-                        if (j > (MAX_HTTP_CLIENTS-1) )
-                        {
-                            printf("%s: Too many connections. Closing %d...\r\n",__func__,new_client);
-                            const char *resp = "HTTP/1.1 503 Service Unavailable\r\n"
-                                            "Connection: close\r\n\r\n"
-                                            "Server busy - try again later";
-                            write(new_client, resp, strlen(resp));
-                            close(new_client);
-                        }
-                        else
+                        if (cnt < MAX_HTTP_CLIENTS )
                         {
                             FD_SET(new_client, &master_fds);
                             if (new_client > max_fd)
                             {
                                 max_fd = new_client;
                             }
+
+                        }
+                        else
+                        {
+                        	printf("%s: Too many connections. Closing %d...\r\n",__func__,new_client);
+							const char *resp = "HTTP/1.1 503 Service Unavailable\r\n"
+											"Connection: close\r\n\r\n"
+											"Server busy - try again later";
+							write(new_client, resp, strlen(resp));
+							osDelay(10);
+							close(new_client);
                         }
                     }
                     else
@@ -557,11 +560,11 @@ static void http_server_thread(void* argument)
 				                        FD_CLR(idx, &master_fds);
 
 				                        // Remove from client sockets array
-				                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
+				                        for (int cnt = 0; cnt < MAX_HTTP_CLIENTS; cnt++)
 				                        {
-				                            if (client_sockets[j] == idx)
+				                            if (client_sockets[cnt] == idx)
 				                            {
-				                                client_sockets[j] = -1;
+				                                client_sockets[cnt] = -1;
 				                                break;
 				                            }
 				                        }
@@ -665,11 +668,11 @@ static void http_server_thread(void* argument)
                         FD_CLR(idx, &master_fds);
 
                         // Remove from client sockets array
-                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
+                        for (int cnt = 0; cnt < MAX_HTTP_CLIENTS; cnt++)
                         {
-                            if (client_sockets[j] == idx)
+                            if (client_sockets[cnt] == idx)
                             {
-                                client_sockets[j] = -1;
+                                client_sockets[cnt] = -1;
                                 break;
                             }
                         }
@@ -680,11 +683,11 @@ static void http_server_thread(void* argument)
                         close(idx);
                         FD_CLR(idx, &master_fds);
 
-                        for (int j = 0; j < MAX_HTTP_CLIENTS; j++)
+                        for (int cnt = 0; cnt < MAX_HTTP_CLIENTS; cnt++)
                         {
-                            if (client_sockets[j] == idx)
+                            if (client_sockets[cnt] == idx)
                             {
-                                client_sockets[j] = -1;
+                                client_sockets[cnt] = -1;
                                 break;
                             }
                         }
