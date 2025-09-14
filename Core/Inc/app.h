@@ -6,6 +6,7 @@
 #include "lwip/sockets.h"
 #include "nanomodbus.h"
 #include "modbus_port.h"
+#include "usart.h"
 
 #define MAX_TCP_SOCK_CLIENTS (MEMP_NUM_NETCONN-1) //Max possible sockets is MEMP_NUM_NETCONN-1
 #define HTTP_PORT 80
@@ -16,6 +17,9 @@
 #define MAX_WS_CLIENTS			   4U
 #define MAX_HTTP_CLIENTS		   MAX_WS_CLIENTS+2U //to guarantee exactly max 4 clients
 //#define ENABLE_MODBUS_TCP
+#define DEBUG_THROUGH_UART
+#define DEBUG_UART_HANDLE		   &huart6
+//#define DEBUG_THROUGH_ITM
 
 typedef struct client_socket
 {

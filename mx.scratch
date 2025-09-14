@@ -14,7 +14,14 @@
       <ProjectName>tcp_server_socket</ProjectName>
       <ProjectNature>C</ProjectNature>
       <Secure />
-      <filestoremove />
+      <filestoremove>
+        <file>
+          <name>Core/Src/dma.c</name>
+        </file>
+        <file>
+          <name>..\Src\stm32f746g-disco.c</name>
+        </file>
+      </filestoremove>
       <sourceEntriesToRemove>
         <sourceEntry />
       </sourceEntriesToRemove>

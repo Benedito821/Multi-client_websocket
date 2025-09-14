@@ -89,6 +89,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static void tcp_server_thread(void* argument);
@@ -126,7 +127,11 @@ int _write(int file,char* ptr,int len)
 {
 	for(int DataIdx=0;DataIdx<len;DataIdx++)
 	{
+#ifdef DEBUG_THROUGH_ITM
 		ITM_SendChar(*ptr++);
+#elif defined(DEBUG_THROUGH_UART)
+		HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*)ptr++, (uint16_t)1,1000);
+#endif
 	}
 	return len;
 }
@@ -230,7 +235,8 @@ void StartDefaultTask(void *argument)
 static void websocket_thread(void *argument)
 {
 	printf("Start %s\n\r",osThreadGetName(osThreadGetId()));
-    char frame[256];    int clients_sock[MAX_WS_CLIENTS] = {[0 ... (MAX_WS_CLIENTS-1)] =  -1};
+    char frame[256];
+    int clients_sock[MAX_WS_CLIENTS] = {[0 ... (MAX_WS_CLIENTS-1)] =  -1};
     _Bool is_button_rised = true;
 
     for(;;)
@@ -981,3 +987,4 @@ void send_response(int sock, const char *content_type, const char *data, int len
     write(sock, data, len);
 }
 /* USER CODE END Application */
+
