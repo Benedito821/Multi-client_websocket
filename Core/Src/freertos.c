@@ -75,12 +75,13 @@ const osThreadAttr_t ws_thread_attr = {
 osThreadId_t ws_thread_id = NULL;
 
 osMessageQueueId_t ws_queue;
-
+#ifdef ENABLE_MODBUS_TCP
 static ts_client_socket clients_sock_arr[MAX_TCP_SOCK_CLIENTS] ;
 
 static nmbs_t nmbs;
 
 static nmbs_server_t nmbs_server = {.id = 0x01,.coils = {0},.regs = {0},.input_regs = {0}};
+#endif
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -92,7 +93,9 @@ const osThreadAttr_t defaultTask_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+#ifdef ENABLE_MODBUS_TCP
 static void tcp_server_thread(void* argument);
+#endif
 static void http_server_thread(void* argument);
 static void websocket_thread(void *argument);
 void generate_ws_accept(const char *key, char *output);
@@ -394,7 +397,7 @@ static void http_server_thread(void* argument)
         osThreadTerminate(osThreadGetId());
     }
 
-    listen(http_sock, 16);
+    listen(http_sock, 32);
     fcntl(http_sock, F_SETFL, O_NONBLOCK);
 
     FD_ZERO(&master_fds);
@@ -669,7 +672,7 @@ static void http_server_thread(void* argument)
 							const char *resp = "HTTP/1.1 404 Not Found\r\n\r\n";
 							write(idx, resp, strlen(resp));
 						}
-                        // After handling the request, close the connection (HTTP 1.0 style)
+
                         close(idx);
                         FD_CLR(idx, &master_fds);
 
@@ -834,7 +837,7 @@ static void tcp_server_thread(void* argument)
 		osThreadTerminate(osThreadGetId());
 	}
 }
-#endif
+
 
 const nmbs_t get_nmbs(void)
 {
@@ -854,7 +857,7 @@ void remotehost_struct_deep_copy(struct sockaddr_in* dest,const struct sockaddr_
 	dest->sin_port = src->sin_port;
 	memcpy(&(dest->sin_zero),src->sin_zero,SIN_ZERO_LEN);
 }
-
+#endif
 void generate_ws_accept(const char *key, char *output)
 {
     char combined[64];
